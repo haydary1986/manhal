@@ -1,0 +1,298 @@
+# حاسبة الترقيات العلمية (P13) — تعليمات الترقيات العلمية رقم (10) لسنة 2025.
+# القيم رسمية من الجدولين (1) و(2) والمواد 1-3. قابلة للتعديل من الادمن عند صدور تعديلات.
+# points: خريطة رتبة->نقاط (الجدول 1 يعتمد على الرتبة الهدف)؛ "*" = نفس القيمة لكل الرتب (الجدول 2).
+# table: 1 = البحوث/النتاج العلمي، 2 = النشاطات وخدمة المجتمع. cap = سقف مساهمة النشاط.
+# النتيجة استرشادية والقرار النهائي للجنة الترقيات.
+activities:
+    - key: if_first
+      label: بحث IF/CS — الباحث الأول
+      table: 1
+      points:
+        assistant_lecturer: 30
+        assistant_professor: 20
+        lecturer: 20
+      cap: 0
+    - key: if_second
+      label: بحث IF/CS — الباحث الثاني
+      table: 1
+      points:
+        assistant_lecturer: 24
+        assistant_professor: 16
+        lecturer: 16
+      cap: 0
+    - key: if_third
+      label: بحث IF/CS — الباحث الثالث
+      table: 1
+      points:
+        assistant_lecturer: 21
+        assistant_professor: 14
+        lecturer: 14
+      cap: 0
+    - key: if_fourth
+      label: بحث IF/CS — الباحث الرابع
+      table: 1
+      points:
+        assistant_lecturer: 15
+        assistant_professor: 10
+        lecturer: 10
+      cap: 0
+    - key: if_fifth
+      label: بحث IF/CS — الباحث الخامس
+      table: 1
+      points:
+        assistant_lecturer: 12
+        assistant_professor: 8
+        lecturer: 8
+      cap: 0
+    - key: if_sixthplus
+      label: بحث IF/CS — ما بعد الخامس
+      table: 1
+      points:
+        assistant_lecturer: 6
+        assistant_professor: 4
+        lecturer: 4
+      cap: 0
+    - key: iq_first
+      label: بحث عراقي معتمد — الباحث الأول
+      table: 1
+      points:
+        assistant_lecturer: 20
+        assistant_professor: 10
+        lecturer: 15
+      cap: 0
+    - key: iq_second
+      label: بحث عراقي معتمد — الباحث الثاني
+      table: 1
+      points:
+        assistant_lecturer: 16
+        assistant_professor: 8
+        lecturer: 12
+      cap: 0
+    - key: iq_third
+      label: بحث عراقي معتمد — الباحث الثالث
+      table: 1
+      points:
+        assistant_lecturer: 14
+        assistant_professor: 7
+        lecturer: 10.5
+      cap: 0
+    - key: iq_fourth
+      label: بحث عراقي معتمد — الباحث الرابع
+      table: 1
+      points:
+        assistant_lecturer: 10
+        assistant_professor: 5
+        lecturer: 7.5
+      cap: 0
+    - key: iq_fifth
+      label: بحث عراقي معتمد — الباحث الخامس
+      table: 1
+      points:
+        assistant_lecturer: 8
+        assistant_professor: 4
+        lecturer: 6
+      cap: 0
+    - key: iq_sixthplus
+      label: بحث عراقي معتمد — ما بعد الخامس
+      table: 1
+      points:
+        assistant_lecturer: 4
+        assistant_professor: 2
+        lecturer: 3
+      cap: 0
+    - key: book_local_solo
+      label: كتاب محلي — منفرد
+      table: 2
+      points:
+        '*': 8
+      cap: 0
+    - key: book_local_two
+      label: كتاب محلي — مشترك (٢)
+      table: 2
+      points:
+        '*': 5
+      cap: 0
+    - key: book_local_multi
+      label: كتاب محلي — مشترك (٣+)
+      table: 2
+      points:
+        '*': 3
+      cap: 0
+    - key: book_intl_solo
+      label: كتاب عالمي — منفرد
+      table: 2
+      points:
+        '*': 10
+      cap: 0
+    - key: book_intl_two
+      label: كتاب عالمي — مشترك (٢)
+      table: 2
+      points:
+        '*': 8
+      cap: 0
+    - key: book_intl_multi
+      label: كتاب عالمي — مشترك (٣+)
+      table: 2
+      points:
+        '*': 5
+      cap: 0
+    - key: book_chapter
+      label: فصل كتاب (Book Chapter)
+      table: 2
+      points:
+        '*': 5
+      cap: 6
+    - key: conference_paper
+      label: بحث منشور في مؤتمر علمي
+      table: 2
+      points:
+        '*': 5
+      cap: 0
+    - key: community_study_in
+      label: دراسة لمشكلة مجتمعية — بالتخصص
+      table: 2
+      points:
+        '*': 10
+      cap: 10
+    - key: community_study_out
+      label: دراسة لمشكلة مجتمعية — خارج التخصص
+      table: 2
+      points:
+        '*': 5
+      cap: 5
+    - key: citations10
+      label: استشهادات (لكل ١٠)
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: review_article
+      label: مقال Review / Case Study
+      table: 2
+      points:
+        '*': 5
+      cap: 10
+    - key: popular_article
+      label: مقال علمي بمجلة عامة
+      table: 2
+      points:
+        '*': 2
+      cap: 5
+    - key: patent_intl
+      label: براءة اختراع دولية
+      table: 2
+      points:
+        '*': 25
+      cap: 25
+    - key: patent_local
+      label: براءة اختراع محلية
+      table: 2
+      points:
+        '*': 5
+      cap: 5
+    - key: award_intl
+      label: وسام/ميدالية دولية
+      table: 2
+      points:
+        '*': 10
+      cap: 0
+    - key: award_local
+      label: وسام/ميدالية محلية
+      table: 2
+      points:
+        '*': 3
+      cap: 0
+    - key: exam_committee
+      label: لجنة امتحانية
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: thesis_committee
+      label: لجنة مناقشة (ماجستير/دكتوراه)
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: scientific_committee
+      label: لجنة علمية/ترقيات
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: conf_committee
+      label: لجنة مؤتمر
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: ministerial_committee
+      label: لجنة وزارية
+      table: 2
+      points:
+        '*': 1
+      cap: 5
+    - key: union_academics
+      label: عضوية نقابة الأكاديميين
+      table: 2
+      points:
+        '*': 3
+      cap: 0
+    - key: union_professional
+      label: عضوية نقابة مهنية/جمعية علمية
+      table: 2
+      points:
+        '*': 1
+      cap: 6
+    - key: supervise_master
+      label: إشراف ماجستير/دبلوم عالٍ
+      table: 2
+      points:
+        '*': 2
+      cap: 4
+    - key: supervise_phd
+      label: إشراف دكتوراه/بورد
+      table: 2
+      points:
+        '*': 3
+      cap: 6
+    - key: editor_chief
+      label: رئيس/مدير تحرير مجلة معتمدة
+      table: 2
+      points:
+        '*': 10
+      cap: 0
+    - key: editor_member
+      label: عضو هيئة تحرير مجلة معتمدة
+      table: 2
+      points:
+        '*': 5
+      cap: 0
+    - key: h_index_excess
+      label: مؤشر هيرتش (لكل قيمة فوق المطلوب)
+      table: 2
+      points:
+        '*': 1
+      cap: 10
+ranks:
+    - key: assistant_lecturer
+      label: مدرس مساعد
+      next_label: مدرس
+      required_total: 70
+      required_table1: 46
+      required_table2: 24
+      min_service_years: 3
+    - key: lecturer
+      label: مدرس
+      next_label: أستاذ مساعد
+      required_total: 80
+      required_table1: 52
+      required_table2: 28
+      min_service_years: 4
+    - key: assistant_professor
+      label: أستاذ مساعد
+      next_label: أستاذ
+      required_total: 90
+      required_table1: 59
+      required_table2: 31
+      min_service_years: 6

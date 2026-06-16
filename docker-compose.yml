@@ -1,0 +1,72 @@
+# منهل — تشغيل كامل: البوت + Postgres (تخزين دائم) + Ollama (embeddings محلية).
+# الاستخدام:
+#   1) cp .env.example .env  ثم املأ الأسرار (BOT_TOKEN, DEEPSEEK_API_KEY, ADMIN_WEB_TOKEN, EMBED_MODEL=bge-m3 ...)
+#   2) docker compose up -d --build
+#   3) docker compose exec ollama ollama pull bge-m3   # تنزيل نموذج التضمين مرة واحدة
+#
+# ملاحظة: DATABASE_URL و OLLAMA_URL تُضبَطان هنا تلقائياً للخدمات الداخلية —
+#         لا تضعهما في .env (ستُتجاهَل قيمتهما لصالح ما أدناه).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: manhal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: manhal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manhal -d manhal"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+    # تفعيل GPU (اختياري إن توفّر):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - { driver: nvidia, count: all, capabilities: [gpu] }
+
+  # تنزيل نموذج التضمين مرّة واحدة تلقائياً (يكتمل خلال دقائق؛ البحث الدلالي/PDF
+  # يصبح جاهزاً بعد اكتماله). يخرج بنجاح بعد السحب.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 4; ollama pull ${EMBED_MODEL:-bge-m3}"]
+    restart: "no"
+
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://manhal:${POSTGRES_PASSWORD:-changeme}@postgres:5432/manhal?sslmode=disable
+      OLLAMA_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "8080:8080" # لوحة الأدمن — في Coolify اربط نطاقاً بدل تعريض المنفذ
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  ollama:

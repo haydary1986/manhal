@@ -1,0 +1,22 @@
+# ⚠️ secrets — never commit
+.env
+*.env
+!.env.example
+
+# binaries
+/manhal
+/bin/
+*.exe
+
+# go
+*.test
+*.out
+vendor/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# previews / scratch
+preview-*.html

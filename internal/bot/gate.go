@@ -1,0 +1,60 @@
+package bot
+
+import (
+	"context"
+	"strings"
+
+	"github.com/erticaz/manhal/internal/config"
+	tg "github.com/go-telegram/bot"
+)
+
+// gateScreen is shown when the user must join the required channel first.
+func gateScreen(bs *config.BotSettings) Screen {
+	return Screen{
+		Text: "🔒 لتفعيل منهل، اشترك أولاً في القناة:\n" + bs.RequiredChannel +
+			"\n\nبعد الاشتراك اضغط «✅ تحقّقت».",
+		Keyboard: &Keyboard{Rows: [][]Button{
+			{{Text: "📢 فتح القناة", URL: channelURL(bs.RequiredChannel)}},
+			{{Text: "✅ تحقّقت", Data: "gate:check"}},
+		}},
+	}
+}
+
+func channelURL(ch string) string {
+	switch {
+	case ch == "":
+		return "https://t.me"
+	case strings.HasPrefix(ch, "http"):
+		return ch
+	case strings.HasPrefix(ch, "@"):
+		return "https://t.me/" + strings.TrimPrefix(ch, "@")
+	default:
+		return "https://t.me/" + ch
+	}
+}
+
+// isSubscribed reports whether the user is a member of the required channel.
+// When subscription is not required it always returns true.
+func (a *App) isSubscribed(ctx context.Context, userID int64) bool {
+	bs := a.settings
+	if !bs.RequireSubscription || bs.RequiredChannel == "" {
+		return true
+	}
+	member, err := a.bot.GetChatMember(ctx, &tg.GetChatMemberParams{
+		ChatID: bs.RequiredChannel,
+		UserID: userID,
+	})
+	if err != nil {
+		// Misconfiguration (bot not admin, bad channel) — don't lock users out.
+		a.logf("gate: GetChatMember error: %v", err)
+		return true
+	}
+	switch {
+	case member.Owner != nil, member.Administrator != nil, member.Member != nil:
+		return true
+	case member.Restricted != nil:
+		return member.Restricted.IsMember
+	default:
+		return false
+	}
+}
