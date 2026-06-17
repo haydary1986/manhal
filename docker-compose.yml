@@ -83,6 +83,34 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # نسخ احتياطي يومي تلقائي لقاعدة البيانات إلى volume منفصل (pgbackups)،
+  # يحتفظ بآخر 14 نسخة. ضمان إضافي فوق التخزين الدائم — لا يلمس بيانات التشغيل.
+  db-backup:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pgbackups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "🗄️ خدمة النسخ الاحتياطي بدأت"
+        while true; do
+          ts=$$(date +%Y%m%d-%H%M%S)
+          if pg_dump -h postgres -U manhal -d manhal -Fc -f /backups/manhal-$$ts.dump; then
+            echo "✅ نسخة احتياطية: manhal-$$ts.dump"
+          else
+            echo "⚠️ فشلت النسخة الاحتياطية $$ts"
+          fi
+          ls -1t /backups/*.dump 2>/dev/null | tail -n +15 | xargs -r rm -f
+          sleep 86400
+        done
+    restart: unless-stopped
+
 volumes:
-  pgdata:
-  ollama:
+  pgdata:     # بيانات Postgres — منفصلة عن صورة التطبيق، تبقى عبر كل تحديث
+  ollama:     # نماذج التضمين المحمّلة
+  pgbackups:  # نسخ pg_dump الاحتياطية (منفصلة عن pgdata)
