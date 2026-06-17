@@ -42,9 +42,12 @@ func menuKeyboard(items []menu.Item, withBack bool) *Keyboard {
 	var row []Button
 	for _, it := range items {
 		var b Button
-		if it.IsSubmenu() {
+		switch {
+		case it.IsSubmenu():
 			b = Button{Text: "📁 " + it.Label, Data: "nav:" + it.ID}
-		} else {
+		case it.IsLink():
+			b = Button{Text: it.Label, URL: it.URL}
+		default:
 			b = Button{Text: it.Label, Data: "menu:" + it.Action}
 		}
 		row = append(row, b)

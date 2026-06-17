@@ -23,17 +23,23 @@ var (
 	ErrDuplicateID = errors.New("menu: duplicate id")
 )
 
-// Item is one menu button. A button is either a leaf (Action set, no Children)
-// or a submenu (Children set, Action empty).
+// Item is one menu button. A button is one of three kinds:
+//   - feature leaf  (Action set)        — runs a built-in bot feature
+//   - link leaf     (URL set)           — opens an external URL
+//   - submenu       (Action & URL empty) — contains Children
 type Item struct {
 	ID       string `yaml:"id"`
 	Label    string `yaml:"label"`
 	Action   string `yaml:"action,omitempty"`
+	URL      string `yaml:"url,omitempty"`
 	Children []Item `yaml:"children,omitempty"`
 }
 
-// IsSubmenu reports whether the item opens a submenu rather than an action.
-func (i Item) IsSubmenu() bool { return i.Action == "" }
+// IsSubmenu reports whether the item opens a submenu (not a feature or a link).
+func (i Item) IsSubmenu() bool { return i.Action == "" && i.URL == "" }
+
+// IsLink reports whether the item opens an external URL.
+func (i Item) IsLink() bool { return i.URL != "" }
 
 // clone deep-copies an item so callers never share backing slices.
 func clone(items []Item) []Item {

@@ -230,6 +230,8 @@ type rowVM struct {
 	Label     string
 	Indent    string
 	IsSubmenu bool
+	IsLink    bool
+	URL       string
 }
 
 type optionVM struct {
@@ -358,6 +360,27 @@ func nameOr(name string) string {
 	return name
 }
 
+// normalizeLink turns a user-entered link into a full URL Telegram accepts:
+// "@handle" -> t.me link, a bare domain -> https://, schemes kept as-is.
+func normalizeLink(s string) string {
+	s = strings.TrimSpace(s)
+	switch {
+	case s == "":
+		return ""
+	case strings.HasPrefix(s, "http://"), strings.HasPrefix(s, "https://"), strings.HasPrefix(s, "tg://"):
+		return s
+	case strings.HasPrefix(s, "@"):
+		return "https://t.me/" + strings.TrimPrefix(s, "@")
+	default:
+		return "https://" + s
+	}
+}
+
+// validLink reports whether a normalized link has a scheme Telegram accepts.
+func validLink(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "tg://")
+}
+
 // actionLabel maps a menu action key to its Arabic label for display.
 func actionLabel(key string) string {
 	for _, a := range actionOptions {
@@ -388,6 +411,8 @@ func buildRows(items []menu.Item, depth int) []rowVM {
 			Label:     it.Label,
 			Indent:    strings.Repeat("— ", depth),
 			IsSubmenu: it.IsSubmenu(),
+			IsLink:    it.IsLink(),
+			URL:       it.URL,
 		})
 		if it.IsSubmenu() {
 			out = append(out, buildRows(it.Children, depth+1)...)
@@ -638,9 +663,20 @@ var menuTemplate = template.Must(template.New("menu").Parse(layoutHead + `
       <label>نص الزر</label>
       <input name="label" placeholder="مثال: 📊 إحصائياتي" required>
       <label>الوظيفة</label>
-      <select name="action">{{range .Actions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+      <select id="actionSel" name="action">{{range .Actions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+      <div id="urlField" style="display:none">
+        <label>الرابط 🔗</label>
+        <input name="url" placeholder="@channel أو https://example.com">
+      </div>
       <button class="btn block" type="submit">إضافة الزر</button>
     </form>
+    <script>
+      (function(){
+        var sel=document.getElementById('actionSel'), uf=document.getElementById('urlField');
+        function t(){ uf.style.display = (sel.value==='url') ? 'block' : 'none'; }
+        sel.addEventListener('change', t); t();
+      })();
+    </script>
   </div>
 
   <div class="card">
@@ -648,7 +684,7 @@ var menuTemplate = template.Must(template.New("menu").Parse(layoutHead + `
     <ul class="list">
       {{range .Rows}}
       <li>
-        <span>{{.Indent}}{{if .IsSubmenu}}<span class="sub">📁 {{.Label}}</span>{{else}}{{.Label}}{{end}}<span class="id">{{.ID}}</span></span>
+        <span>{{.Indent}}{{if .IsSubmenu}}<span class="sub">📁 {{.Label}}</span>{{else if .IsLink}}🔗 {{.Label}}{{else}}{{.Label}}{{end}}<span class="id">{{.ID}}</span></span>
         <form class="inline" method="post" action="/admin/menu/delete" onsubmit="return confirm('حذف هذا الزر؟');">
           <input type="hidden" name="id" value="{{.ID}}">
           <button class="btn-del" type="submit">حذف</button>

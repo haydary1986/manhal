@@ -28,23 +28,26 @@ func testMenuApp(t *testing.T) *App {
 func TestMenuKeyboard_SubmenuVsAction(t *testing.T) {
 	items := []menu.Item{
 		{ID: "search", Label: "🔍", Action: "search"},
-		{ID: "refs", Label: "المراجع"}, // submenu (no action)
+		{ID: "refs", Label: "المراجع"},                              // submenu (no action)
+		{ID: "chan", Label: "📢 قناتنا", URL: "https://t.me/manhal"}, // link
 	}
 	kb := menuKeyboard(items, false)
 
-	var sawAction, sawNav bool
+	var sawAction, sawNav, sawLink bool
 	for _, row := range kb.Rows {
 		for _, b := range row {
-			if b.Data == "menu:search" {
+			switch {
+			case b.Data == "menu:search":
 				sawAction = true
-			}
-			if b.Data == "nav:refs" {
+			case b.Data == "nav:refs":
 				sawNav = true
+			case b.URL == "https://t.me/manhal" && b.Data == "":
+				sawLink = true
 			}
 		}
 	}
-	if !sawAction || !sawNav {
-		t.Errorf("expected menu:search and nav:refs; got action=%v nav=%v", sawAction, sawNav)
+	if !sawAction || !sawNav || !sawLink {
+		t.Errorf("expected action+nav+link; got action=%v nav=%v link=%v", sawAction, sawNav, sawLink)
 	}
 }
 

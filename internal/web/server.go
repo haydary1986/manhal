@@ -48,6 +48,7 @@ type Settings interface {
 // "submenu" container option. Keys match the bot's menu dispatch.
 var actionOptions = []struct{ Key, Label string }{
 	{"submenu", "📁 قائمة فرعية"},
+	{"url", "🔗 رابط خارجي"},
 	{"announcements", "📢 الإعلانات"},
 	{"follow", "🔔 متابعاتي"},
 	{"search", "🔍 بحث عن ورقة"},
@@ -186,9 +187,18 @@ func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	item := menu.Item{Label: label}
-	if action == "submenu" {
+	switch action {
+	case "submenu":
 		item.ID = s.menu.GenID("sub")
-	} else {
+	case "url":
+		link := normalizeLink(r.FormValue("url"))
+		if !validLink(link) {
+			redirectErr(w, r, "أدخل رابطاً صحيحاً يبدأ بـ http أو https أو https://t.me")
+			return
+		}
+		item.ID = s.menu.GenID("link")
+		item.URL = link
+	default:
 		item.ID = s.menu.GenID(action)
 		item.Action = action
 	}

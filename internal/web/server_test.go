@@ -312,6 +312,47 @@ func TestSettings_SaveGate(t *testing.T) {
 	}
 }
 
+func TestAdd_URLButton(t *testing.T) {
+	s := testServer(t)
+	form := url.Values{"parent": {menu.RootID}, "label": {"📢 قناتنا"}, "action": {"url"}, "url": {"@manhal_channel"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/menu/add", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+
+	kids, _ := s.menu.Children(menu.RootID)
+	var link *menu.Item
+	for i := range kids {
+		if kids[i].IsLink() {
+			link = &kids[i]
+		}
+	}
+	if link == nil {
+		t.Fatal("link button not created")
+	}
+	if link.URL != "https://t.me/manhal_channel" {
+		t.Errorf("url = %q, want normalized t.me link", link.URL)
+	}
+	if link.IsSubmenu() {
+		t.Error("link should not be a submenu")
+	}
+
+	// An empty/invalid URL is rejected.
+	bad := url.Values{"parent": {menu.RootID}, "label": {"x"}, "action": {"url"}, "url": {""}}
+	req2 := httptest.NewRequest(http.MethodPost, "/admin/menu/add", strings.NewReader(bad.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.SetBasicAuth("admin", "secret")
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req2)
+	if !strings.Contains(rec2.Header().Get("Location"), "err=") {
+		t.Errorf("empty url should redirect with err, got %q", rec2.Header().Get("Location"))
+	}
+}
+
 func TestAdd_DuplicateShowsError(t *testing.T) {
 	s := testServer(t)
 	// "search" already exists, GenID makes it unique, so duplicate can't happen
