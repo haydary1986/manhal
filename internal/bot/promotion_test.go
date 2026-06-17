@@ -32,13 +32,13 @@ func TestPromotionRankScreen_ListsRanks(t *testing.T) {
 func TestPromotionInputScreen_ShowsRequirementsAndKeys(t *testing.T) {
 	rank, _ := promotion.DefaultRules().FindRank("assistant_lecturer")
 	scr := promoApp().promotionInputScreen(rank)
-	for _, want := range []string{"if_first", "book_chapter", "years", "جدول١ ≥ 46", "الجدول ١", "الجدول ٢"} {
+	for _, want := range []string{"if_first", "book_chapter", "years", "الجدول ١ ≥ 46", "الجدول ١", "الجدول ٢"} {
 		if !strings.Contains(scr.Text, want) {
 			t.Errorf("input template missing %q", want)
 		}
 	}
 	// if_first is worth 30 to an assistant lecturer.
-	if !strings.Contains(scr.Text, "= 30") {
+	if !strings.Contains(scr.Text, "30 نقطة") {
 		t.Errorf("template should show per-rank points:\n%s", scr.Text)
 	}
 }

@@ -51,26 +51,32 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 // (with this rank's point values) for the user to fill in.
 func (a *App) promotionInputScreen(rank promotion.Rank) Screen {
 	var b strings.Builder
-	b.WriteString("📊 " + rank.Label + " ← " + rank.NextLabel + "\n")
-	b.WriteString("المطلوب: المجموع ≥ " + fmtNum(rank.RequiredTotal) +
-		" · جدول١ ≥ " + fmtNum(rank.RequiredTable1) +
-		" · جدول٢ ≥ " + fmtNum(rank.RequiredTable2) +
+	b.WriteString("📊 الترقية: " + rank.Label + " ← " + rank.NextLabel + "\n")
+	b.WriteString("🎯 المطلوب: المجموع ≥ " + fmtNum(rank.RequiredTotal) +
+		" · الجدول ١ ≥ " + fmtNum(rank.RequiredTable1) +
+		" · الجدول ٢ ≥ " + fmtNum(rank.RequiredTable2) +
 		" · الخدمة ≥ " + strconv.Itoa(rank.MinServiceYears) + " سنوات\n\n")
-	b.WriteString("أرسل أعدادك (كل سطر «المفتاح: العدد»):\n")
+	b.WriteString("✍️ الطريقة: أرسل البنود التي تنطبق عليك فقط، كل بند في سطر بصيغة «المفتاح: العدد».\n")
+	b.WriteString("لا حاجة لإرسال ما قيمته صفر.\n\n")
+	b.WriteString("مثال على الإرسال:\n")
+	b.WriteString("if_first: 1\n")
+	b.WriteString("iq_second: 2\n")
+	b.WriteString("years: 4\n")
 
-	b.WriteString("\n— الجدول ١: البحوث —\n")
+	b.WriteString("\n━━━ الجدول ١: البحوث ━━━\n")
 	for _, act := range a.promotion.ActivitiesByTable(1) {
-		b.WriteString(act.Key + ": 0  (" + act.Label + " = " + fmtNum(act.PointsFor(rank.Key)) + ")\n")
+		b.WriteString("🔹 " + act.Key + " — " + act.Label + " (" + fmtNum(act.PointsFor(rank.Key)) + " نقطة)\n")
 	}
-	b.WriteString("\n— الجدول ٢: النشاطات —\n")
+	b.WriteString("\n━━━ الجدول ٢: النشاطات ━━━\n")
 	for _, act := range a.promotion.ActivitiesByTable(2) {
-		line := act.Key + ": 0  (" + act.Label + " = " + fmtNum(act.PointsFor(rank.Key))
+		line := "🔸 " + act.Key + " — " + act.Label + " (" + fmtNum(act.PointsFor(rank.Key)) + " نقطة"
 		if act.Cap > 0 {
-			line += "، سقف " + fmtNum(act.Cap)
+			line += "، السقف " + fmtNum(act.Cap)
 		}
 		b.WriteString(line + ")\n")
 	}
-	b.WriteString("\nyears: 0  (سنوات الخدمة منذ آخر ترقية)")
+	b.WriteString("\n⏱️ years — سنوات الخدمة منذ آخر ترقية\n")
+	b.WriteString("\nأرسل بنودك الآن 👇")
 
 	return Screen{
 		Text: b.String(),
@@ -84,9 +90,25 @@ func (a *App) promotionInputScreen(rank promotion.Rank) Screen {
 func (a *App) handlePromotionActivities(ctx context.Context, msg *models.Message) {
 	chatID := msg.Chat.ID
 	rankKey := a.sessions.promoteRank(msg.From.ID)
-	a.sessions.clear(msg.From.ID)
 
 	counts, years := promotion.ParseActivities(msg.Text)
+	if len(counts) == 0 && years == 0 {
+		// Nothing recognized — guide the user and keep the session so they can
+		// simply retype without restarting the flow.
+		a.send(ctx, chatID, Screen{
+			Text: "🤔 لم أتعرّف على أي بند في رسالتك.\n\n" +
+				"أرسل كل بند في سطر بصيغة «المفتاح: العدد»، مثل:\n" +
+				"if_first: 1\niq_second: 2\nyears: 4\n\n" +
+				"انسخ المفاتيح من القائمة بالأعلى وأعِد الإرسال.",
+			Keyboard: &Keyboard{Rows: [][]Button{
+				{{Text: "🔁 عرض القائمة من جديد", Data: "menu:promotion"}},
+				{{Text: "⬅️ القائمة الرئيسية", Data: "menu:home"}},
+			}},
+		})
+		return
+	}
+	a.sessions.clear(msg.From.ID)
+
 	res, ok := a.promotion.Compute(promotion.Input{RankKey: rankKey, Counts: counts, ServiceYears: years})
 	if !ok {
 		a.send(ctx, chatID, a.promotionRankScreen())
