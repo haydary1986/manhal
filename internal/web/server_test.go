@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
@@ -31,7 +32,7 @@ type fakeSettings struct {
 	require bool
 }
 
-func (f *fakeSettings) RequiredChannel() string  { return f.channel }
+func (f *fakeSettings) RequiredChannel() string   { return f.channel }
 func (f *fakeSettings) RequireSubscription() bool { return f.require }
 func (f *fakeSettings) SetGate(channel string, require bool) error {
 	if require && channel == "" {
@@ -269,6 +270,53 @@ func TestSupportReply_NilNotifierStillSaves(t *testing.T) {
 	tickets, _ := st.ListTickets(context.Background())
 	if tickets[0].Reply != "ans" {
 		t.Error("reply should be saved even without a notifier")
+	}
+}
+
+func TestUsers_ListMessageTier(t *testing.T) {
+	mgr := menu.NewManager(t.TempDir(), nil)
+	st := store.NewMemory()
+	notifier := &fakeNotifier{}
+	_ = st.SaveUser(context.Background(), &domain.User{TelegramID: 50, Name: "علي", Tier: domain.TierFree})
+	_ = st.RecordUsage(context.Background(), 50, "search")
+	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{})
+
+	// The list page shows the user.
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "علي") {
+		t.Fatalf("users list wrong: %d", rec.Code)
+	}
+
+	// Messaging a user pushes through the notifier.
+	form := url.Values{"id": {"50"}, "text": {"مرحباً بك"}}
+	req2 := httptest.NewRequest(http.MethodPost, "/admin/users/message", strings.NewReader(form.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.SetBasicAuth("admin", "secret")
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusSeeOther || notifier.calls != 1 || notifier.userID != 50 {
+		t.Fatalf("message not pushed: code=%d calls=%d user=%d", rec2.Code, notifier.calls, notifier.userID)
+	}
+	if !strings.Contains(notifier.text, "مرحباً بك") {
+		t.Errorf("pushed text missing message: %q", notifier.text)
+	}
+
+	// Granting a premium tier persists and makes the user premium.
+	form2 := url.Values{"id": {"50"}, "tier": {"researcher"}}
+	req3 := httptest.NewRequest(http.MethodPost, "/admin/users/tier", strings.NewReader(form2.Encode()))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req3.SetBasicAuth("admin", "secret")
+	rec3 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusSeeOther {
+		t.Fatalf("tier status = %d", rec3.Code)
+	}
+	u, _ := st.GetUser(context.Background(), 50)
+	if u.Tier != domain.TierResearcher || !u.IsPremium(time.Now()) {
+		t.Errorf("user not premium after grant: tier=%q", u.Tier)
 	}
 }
 

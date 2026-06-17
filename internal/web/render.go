@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,15 +77,15 @@ type barVM struct {
 
 type dashboardVM struct {
 	layout
-	Stats     statBlock
-	Features  []featRowVM
-	TopUsers  []userRowVM
-	Premium   []userRowVM
-	Weekdays  []barVM
-	Hours     []barVM
-	PeakDay   string
-	PeakHour  string
-	Msg, Err  string
+	Stats    statBlock
+	Features []featRowVM
+	TopUsers []userRowVM
+	Premium  []userRowVM
+	Weekdays []barVM
+	Hours    []barVM
+	PeakDay  string
+	PeakHour string
+	Msg, Err string
 }
 
 // arabicWeekdays maps Go's time.Weekday index (Sunday=0) to Arabic names.
@@ -105,9 +106,9 @@ func (s *Server) renderDashboard(w http.ResponseWriter, ctx context.Context, msg
 			vm.Stats.Premium++
 			if len(vm.Premium) < 10 {
 				vm.Premium = append(vm.Premium, userRowVM{
-					Rank: len(vm.Premium) + 1,
-					Name: nameOr(u.Name),
-					ID:   strconv.FormatInt(u.TelegramID, 10),
+					Rank:  len(vm.Premium) + 1,
+					Name:  nameOr(u.Name),
+					ID:    strconv.FormatInt(u.TelegramID, 10),
 					Extra: string(u.Tier),
 				})
 			}
@@ -265,6 +266,93 @@ func (s *Server) renderMenu(w http.ResponseWriter, ctx context.Context, msg, err
 		},
 	}
 	writeHTML(w, menuTemplate, vm)
+}
+
+// ---------- users (activity + messaging + premium) ----------
+
+type userManageVM struct {
+	Rank      int
+	Name      string
+	ID        string
+	Count     int
+	Tier      string
+	TierLabel string
+	IsPremium bool
+	Joined    string
+}
+
+type usersVM struct {
+	layout
+	Users    []userManageVM
+	Total    int
+	Premium  int
+	Msg, Err string
+}
+
+func tierLabel(t string) string {
+	switch t {
+	case "student":
+		return "طالب"
+	case "researcher":
+		return "باحث"
+	default:
+		return "مجاني"
+	}
+}
+
+// renderUsers lists every user (most active first) with messaging and tier
+// controls.
+func (s *Server) renderUsers(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := usersVM{Msg: msg, Err: errMsg}
+	now := time.Now()
+
+	counts := map[int64]int{}
+	if top, err := s.data.TopUsers(ctx, 5000); err == nil {
+		for _, u := range top {
+			counts[u.UserID] = u.Count
+		}
+	}
+	users, _ := s.data.ListUsers(ctx)
+	vm.Total = len(users)
+	rows := make([]userManageVM, 0, len(users))
+	for _, u := range users {
+		prem := u.IsPremium(now)
+		if prem {
+			vm.Premium++
+		}
+		tier := string(u.Tier)
+		if tier == "" {
+			tier = string(domain.TierFree)
+		}
+		rows = append(rows, userManageVM{
+			Name:      nameOr(u.Name),
+			ID:        strconv.FormatInt(u.TelegramID, 10),
+			Count:     counts[u.TelegramID],
+			Tier:      tier,
+			TierLabel: tierLabel(tier),
+			IsPremium: prem,
+			Joined:    u.CreatedAt.Format("2006-01-02"),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Count != rows[j].Count {
+			return rows[i].Count > rows[j].Count
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	for i := range rows {
+		rows[i].Rank = i + 1
+	}
+	vm.Users = rows
+
+	vm.layout = layout{
+		Title:     "منهل — المستخدمون",
+		Heading:   "👥 المستخدمون",
+		Sub:       "النشاط، المراسلة المباشرة، وإدارة الاشتراك",
+		Active:    "users",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, usersTemplate, vm)
 }
 
 // ---------- settings (subscription gate) ----------
@@ -526,6 +614,15 @@ form.inline{margin:0;width:auto}
 .hcol .hlbl{font-size:9px;color:#94a3b8;margin-top:4px}
 .peak-note{margin-top:12px;font-size:13px;color:#64748b}
 .peak-note b{color:#4338ca}
+.urow{border:1px solid #e9edf3;border-radius:12px;margin-bottom:10px;overflow:hidden}
+.urow summary{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none;user-select:none}
+.urow summary::-webkit-details-marker{display:none}
+.urow summary:hover{background:#f8fafc}
+.urow[open] summary{background:#f8fafc;border-bottom:1px solid #eef2f7}
+.usp{flex:1}
+.udetail{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}
+@media(max-width:760px){.udetail{grid-template-columns:1fr}}
+.ucard{margin:0;background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:14px}
 `
 
 const layoutHead = `<!doctype html>
@@ -545,6 +642,7 @@ const layoutHead = `<!doctype html>
     </div>
     <nav class="nav">
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
+      <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -720,6 +818,53 @@ var supportTemplate = template.Must(template.New("support").Parse(layoutHead + `
   </div>
   {{else}}
   <div class="empty">لا توجد طلبات دعم حتى الآن.</div>
+  {{end}}
+</div>
+` + layoutFoot))
+
+var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="stats">
+  <div class="stat"><div class="num">{{.Total}}</div><div class="lbl">👥 إجمالي المستخدمين</div></div>
+  <div class="stat"><div class="num">{{.Premium}}</div><div class="lbl">💎 مشتركو البريميم</div></div>
+</div>
+
+<div class="card">
+  <h3>🏆 المستخدمون — الأنشط أولاً</h3>
+  <p style="color:#64748b;font-size:13px;margin:0 0 14px">اضغط على أي مستخدم لمراسلته مباشرة أو تغيير اشتراكه.</p>
+  {{range .Users}}
+  <details class="urow">
+    <summary>
+      <span class="rank {{if le .Rank 3}}gold{{end}}">{{.Rank}}</span>
+      <span><span class="r-name">{{.Name}}</span> <span class="r-id">#{{.ID}}</span></span>
+      {{if .IsPremium}}<span class="r-tag">💎 {{.TierLabel}}</span>{{end}}
+      <span class="usp"></span>
+      <span class="r-count" title="عدد مرات الاستخدام">{{.Count}}</span>
+    </summary>
+    <div class="udetail">
+      <form method="post" action="/admin/users/message" class="ucard">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <label>💬 مراسلة المستخدم (تصله في تلكرام)</label>
+        <textarea name="text" rows="2" placeholder="مثال: تم استلام مبلغ الاشتراك وتفعيل حسابك." required></textarea>
+        <button class="btn" type="submit">إرسال الرسالة</button>
+      </form>
+      <form method="post" action="/admin/users/tier" class="ucard">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <label>💎 الاشتراك (تفعيل/إلغاء البريميم يدوياً)</label>
+        <select name="tier">
+          <option value="free" {{if eq .Tier "free"}}selected{{end}}>مجاني</option>
+          <option value="student" {{if eq .Tier "student"}}selected{{end}}>طالب (بريميم)</option>
+          <option value="researcher" {{if eq .Tier "researcher"}}selected{{end}}>باحث (بريميم)</option>
+        </select>
+        <button class="btn" type="submit">تحديث الاشتراك</button>
+        <div style="font-size:12px;color:#94a3b8;margin-top:8px">انضمّ: {{.Joined}}</div>
+      </form>
+    </div>
+  </details>
+  {{else}}
+  <div class="empty">لا مستخدمون بعد.</div>
   {{end}}
 </div>
 ` + layoutFoot))

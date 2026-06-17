@@ -33,6 +33,27 @@ func channelURL(ch string) string {
 	}
 }
 
+// channelChatID converts whatever the admin entered (a t.me link, a @handle, a
+// bare username, or a numeric -100… id) into the ChatID form that the Telegram
+// API's GetChatMember accepts ("@username" or a numeric id). Without this, a
+// link like "https://t.me/foo" makes the membership check fail and the gate
+// silently lets everyone through.
+func channelChatID(ch string) string {
+	ch = strings.TrimSpace(ch)
+	for _, p := range []string{"https://t.me/", "http://t.me/", "https://telegram.me/", "t.me/"} {
+		ch = strings.TrimPrefix(ch, p)
+	}
+	ch = strings.TrimSpace(strings.TrimPrefix(ch, "@"))
+	switch {
+	case ch == "":
+		return ""
+	case strings.HasPrefix(ch, "-"): // numeric private-channel id
+		return ch
+	default:
+		return "@" + ch
+	}
+}
+
 // isSubscribed reports whether the user is a member of the required channel.
 // When subscription is not required it always returns true.
 func (a *App) isSubscribed(ctx context.Context, userID int64) bool {
@@ -41,7 +62,7 @@ func (a *App) isSubscribed(ctx context.Context, userID int64) bool {
 		return true
 	}
 	member, err := a.bot.GetChatMember(ctx, &tg.GetChatMemberParams{
-		ChatID: bs.RequiredChannel,
+		ChatID: channelChatID(bs.RequiredChannel),
 		UserID: userID,
 	})
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,8 @@ type Data interface {
 	ListTickets(ctx context.Context) ([]domain.Ticket, error)
 	AnswerTicket(ctx context.Context, id, reply string) (domain.Ticket, error)
 	ListUsers(ctx context.Context) ([]domain.User, error)
+	GetUser(ctx context.Context, telegramID int64) (*domain.User, error)
+	SaveUser(ctx context.Context, u *domain.User) error
 	ListLibrary(ctx context.Context, userID int64) ([]domain.LibraryItem, error)
 	ListAllSubscriptions(ctx context.Context) ([]domain.Subscription, error)
 	ListAllCitationWatches(ctx context.Context) ([]domain.CitationWatch, error)
@@ -100,6 +103,9 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("/", s.auth(s.handleIndex))
 	mux.HandleFunc("/admin", s.auth(s.handleDashboard))
+	mux.HandleFunc("/admin/users", s.auth(s.handleUsers))
+	mux.HandleFunc("/admin/users/message", s.auth(s.handleUserMessage))
+	mux.HandleFunc("/admin/users/tier", s.auth(s.handleUserTier))
 	mux.HandleFunc("/admin/menu", s.auth(s.handleMenuPage))
 	mux.HandleFunc("/admin/menu/add", s.auth(s.handleAdd))
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
@@ -167,6 +173,78 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 // handleMenuPage renders the button-management page.
 func (s *Server) handleMenuPage(w http.ResponseWriter, r *http.Request) {
 	s.renderMenu(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleUsers renders the user-management page (activity, message, premium).
+func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
+	s.renderUsers(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleUserMessage pushes an admin message to a user via the bot.
+func (s *Server) handleUserMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("نموذج غير صالح"), http.StatusSeeOther)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
+	text := strings.TrimSpace(r.FormValue("text"))
+	if err != nil || text == "" {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("المعرّف والرسالة مطلوبان"), http.StatusSeeOther)
+		return
+	}
+	if s.notifier == nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("البوت غير متصل — تعذّر الإرسال"), http.StatusSeeOther)
+		return
+	}
+	if err := s.notifier.Notify(id, "📩 رسالة من فريق منهل:\n\n"+text); err != nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("تعذّر إرسال الرسالة"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/users?msg="+urlencode("تم إرسال الرسالة للمستخدم"), http.StatusSeeOther)
+}
+
+// handleUserTier sets a user's subscription tier (manual premium grant/revoke).
+func (s *Server) handleUserTier(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("نموذج غير صالح"), http.StatusSeeOther)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
+	tier := domain.Tier(strings.TrimSpace(r.FormValue("tier")))
+	if err != nil || !validTier(tier) {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("بيانات غير صالحة"), http.StatusSeeOther)
+		return
+	}
+	user, gerr := s.data.GetUser(r.Context(), id)
+	if gerr != nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("المستخدم غير موجود"), http.StatusSeeOther)
+		return
+	}
+	updated := *user
+	updated.Tier = tier
+	updated.PremiumUntil = nil // manual grant is permanent until changed
+	if serr := s.data.SaveUser(r.Context(), &updated); serr != nil {
+		http.Redirect(w, r, "/admin/users?err="+urlencode("تعذّر حفظ الاشتراك"), http.StatusSeeOther)
+		return
+	}
+	// Best-effort: notify the user of their new tier.
+	if s.notifier != nil && tier != domain.TierFree {
+		_ = s.notifier.Notify(id, "🎉 تم تفعيل اشتراكك المميّز في منهل! استمتع بكامل الميزات.")
+	}
+	http.Redirect(w, r, "/admin/users?msg="+urlencode("تم تحديث اشتراك المستخدم"), http.StatusSeeOther)
+}
+
+// validTier reports whether t is one of the known subscription tiers.
+func validTier(t domain.Tier) bool {
+	return t == domain.TierFree || t == domain.TierStudent || t == domain.TierResearcher
 }
 
 func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
