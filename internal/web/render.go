@@ -13,6 +13,7 @@ import (
 
 	"github.com/erticaz/manhal/internal/announce"
 	"github.com/erticaz/manhal/internal/domain"
+	"github.com/erticaz/manhal/internal/logbuf"
 	"github.com/erticaz/manhal/internal/menu"
 )
 
@@ -432,6 +433,38 @@ func (s *Server) renderAnnouncements(w http.ResponseWriter, msg, errMsg string) 
 	writeHTML(w, announceTemplate, vm)
 }
 
+// ---------- logs ----------
+
+type logLineVM struct {
+	Text  string
+	IsErr bool
+}
+
+type logsVM struct {
+	layout
+	Lines []logLineVM
+}
+
+// renderLogs shows the most recent log lines (newest first), flagging errors.
+func (s *Server) renderLogs(w http.ResponseWriter, ctx context.Context) {
+	lines := logbuf.Default.Lines()
+	vm := logsVM{}
+	for i := len(lines) - 1; i >= 0; i-- {
+		low := strings.ToLower(lines[i])
+		isErr := strings.Contains(low, "error") || strings.Contains(low, "panic") ||
+			strings.Contains(lines[i], "❌") || strings.Contains(low, "fail") || strings.Contains(low, "تعذّر")
+		vm.Lines = append(vm.Lines, logLineVM{Text: lines[i], IsErr: isErr})
+	}
+	vm.layout = layout{
+		Title:     "منهل — السجلّات",
+		Heading:   "📜 سجلّات النظام",
+		Sub:       "آخر أحداث وأخطاء البوت — للتشخيص السريع",
+		Active:    "logs",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, logsTemplate, vm)
+}
+
 // ---------- settings (subscription gate) ----------
 
 type settingsVM struct {
@@ -443,6 +476,7 @@ type settingsVM struct {
 	PaymentLink    string
 	FreeLimit      int
 	PremiumLimit   int
+	DeepSeekKeySet bool
 	Msg, Err       string
 }
 
@@ -457,6 +491,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg,
 		vm.PaymentLink = s.settings.PaymentLink()
 		vm.FreeLimit = s.settings.FreeAILimit()
 		vm.PremiumLimit = s.settings.PremiumAILimit()
+		vm.DeepSeekKeySet = strings.TrimSpace(s.settings.DeepSeekKey()) != ""
 	}
 	vm.layout = layout{
 		Title:     "منهل — الإعدادات",
@@ -735,6 +770,9 @@ form.inline{margin:0;width:auto}
 .udetail{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}
 @media(max-width:760px){.udetail{grid-template-columns:1fr}}
 .ucard{margin:0;background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:14px}
+.logbox{background:#0f172a;border-radius:10px;padding:14px;max-height:560px;overflow:auto;direction:ltr;text-align:left}
+.logline{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#cbd5e1;white-space:pre-wrap;word-break:break-word;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.logline.err{color:#fca5a5;background:rgba(239,68,68,.08)}
 `
 
 const layoutHead = `<!doctype html>
@@ -759,6 +797,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
+      <a href="/admin/logs" class="{{if eq .Active "logs"}}active{{end}}">📜 <span class="t">السجلّات</span></a>
     </nav>
     <div class="side-foot">منهل · مساعد الباحثين</div>
   </aside>
@@ -1037,6 +1076,15 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
 </div>
 ` + layoutFoot))
 
+var logsTemplate = template.Must(template.New("logs").Parse(layoutHead + `
+<div class="card">
+  <h3>📜 آخر السجلّات <span class="tag">الأحدث أولاً</span> <a href="/admin/logs" class="tag" style="text-decoration:none">🔄 تحديث</a></h3>
+  <div class="logbox">
+    {{range .Lines}}<div class="logline{{if .IsErr}} err{{end}}">{{.Text}}</div>{{else}}<div class="empty">لا سجلّات بعد.</div>{{end}}
+  </div>
+</div>
+` + layoutFoot))
+
 var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead + `
 {{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
@@ -1061,6 +1109,20 @@ var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead +
     {{if .Require}}<span class="tag">مُفعّل ✅</span>{{else}}<span class="tag">مُعطّل</span>{{end}}
     {{if .Channel}} · القناة: <b>{{.Channel}}</b>{{end}}
   </div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <h3>🔑 مفاتيح API</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 12px;line-height:1.7">
+    مفتاح <b>DeepSeek</b> يشغّل كل أدوات الذكاء. الحالة:
+    {{if .DeepSeekKeySet}}<span class="tag">مضبوط ✅</span>{{else}}<span class="tag">غير مضبوط ⚠️</span>{{end}}
+    — التغيير يسري <b>فوراً</b> بلا إعادة نشر.
+  </p>
+  <form method="post" action="/admin/settings/apikey">
+    <label>مفتاح DeepSeek</label>
+    <input name="deepseek_key" type="password" placeholder="sk-... الصق المفتاح الجديد" autocomplete="off">
+    <button class="btn" type="submit">💾 حفظ المفتاح</button>
+  </form>
 </div>
 
 <div class="card" style="max-width:640px">

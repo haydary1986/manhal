@@ -61,6 +61,8 @@ type Settings interface {
 	FreeAILimit() int
 	PremiumAILimit() int
 	SetLimits(free, premium int) error
+	DeepSeekKey() string
+	SetDeepSeekKey(key string) error
 }
 
 // actionOptions are the leaf actions an admin can attach to a button, plus the
@@ -132,10 +134,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
+	mux.HandleFunc("/admin/logs", s.auth(s.handleLogs))
 	mux.HandleFunc("/admin/settings", s.auth(s.handleSettings))
 	mux.HandleFunc("/admin/settings/gate", s.auth(s.handleSetGate))
 	mux.HandleFunc("/admin/settings/payment", s.auth(s.handleSetPayment))
 	mux.HandleFunc("/admin/settings/limits", s.auth(s.handleSetLimits))
+	mux.HandleFunc("/admin/settings/apikey", s.auth(s.handleSetAPIKey))
 	return mux
 }
 
@@ -479,6 +483,34 @@ func (s *Server) handleSupportReply(w http.ResponseWriter, r *http.Request) {
 		msg = "تم حفظ الرد، لكن تعذّر إرساله الآن."
 	}
 	http.Redirect(w, r, "/admin/support?msg="+urlencode(msg), http.StatusSeeOther)
+}
+
+// handleSetAPIKey saves the admin-managed DeepSeek API key.
+func (s *Server) handleSetAPIKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.settings == nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("الإعدادات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	key := strings.TrimSpace(r.FormValue("deepseek_key"))
+	if key == "" {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("المفتاح فارغ"), http.StatusSeeOther)
+		return
+	}
+	if err := s.settings.SetDeepSeekKey(key); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("تعذّر حفظ المفتاح"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ مفتاح DeepSeek — فعّال فوراً"), http.StatusSeeOther)
+}
+
+// handleLogs renders recent system logs for diagnosis.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	s.renderLogs(w, r.Context())
 }
 
 // handleSettings renders the bot-settings page (subscription gate).

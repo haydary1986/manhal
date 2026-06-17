@@ -3,7 +3,9 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/erticaz/manhal/internal/config"
 	"github.com/erticaz/manhal/internal/embed"
 	"github.com/erticaz/manhal/internal/journal"
+	"github.com/erticaz/manhal/internal/logbuf"
 	"github.com/erticaz/manhal/internal/menu"
 	"github.com/erticaz/manhal/internal/predator"
 	"github.com/erticaz/manhal/internal/promotion"
@@ -24,6 +27,9 @@ import (
 )
 
 func main() {
+	// Mirror logs to an in-memory buffer so the admin "logs" page can show them.
+	log.SetOutput(io.MultiWriter(os.Stderr, logbuf.Default))
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -35,6 +41,9 @@ func main() {
 	}
 	// Shared, persisted settings: the bot reads the gate live; the web edits it.
 	settingsMgr := config.NewSettingsManager(cfg.DataDir, settings)
+	// Seed the API key from the environment on first run; the admin can override
+	// it later from the dashboard.
+	settingsMgr.SeedDeepSeekKey(cfg.DeepSeekKey)
 
 	disciplines, err := config.LoadDisciplines(cfg.DataDir)
 	if err != nil {
@@ -98,11 +107,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// AI provider reads its key live from settings so the admin can change it.
+	aiProvider := ai.NewDeepSeek(settingsMgr.DeepSeekKey())
+	aiProvider.SetKeyFunc(settingsMgr.DeepSeekKey)
+
 	app, err := bot.New(bot.Deps{
 		Config:      cfg,
 		Settings:    settingsMgr,
 		Store:       st,
-		AI:          ai.NewDeepSeek(cfg.DeepSeekKey),
+		AI:          aiProvider,
 		Citations:   scholar.NewCrossref(cfg.CrossrefMailto),
 		Search:      openAlex,
 		Authors:     openAlex,

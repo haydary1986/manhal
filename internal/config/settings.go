@@ -27,6 +27,8 @@ type BotSettings struct {
 	// unlimited (premium).
 	FreeAILimit    int `yaml:"free_ai_limit"`
 	PremiumAILimit int `yaml:"premium_ai_limit"`
+	// API key managed from the admin page (seeded from the env at first run).
+	DeepSeekKey string `yaml:"deepseek_key"`
 }
 
 // DefaultBotSettings is the seed used when no file is present.
@@ -131,6 +133,32 @@ func (m *SettingsManager) PaymentLink() string { return m.Get().PaymentLink }
 // FreeAILimit / PremiumAILimit return the configured daily AI quotas.
 func (m *SettingsManager) FreeAILimit() int    { return m.Get().FreeAILimit }
 func (m *SettingsManager) PremiumAILimit() int { return m.Get().PremiumAILimit }
+
+// DeepSeekKey returns the current DeepSeek API key.
+func (m *SettingsManager) DeepSeekKey() string { return m.Get().DeepSeekKey }
+
+// SetDeepSeekKey updates and persists the DeepSeek API key.
+func (m *SettingsManager) SetDeepSeekKey(key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.cur
+	next.DeepSeekKey = strings.TrimSpace(key)
+	if err := SaveBotSettings(m.dataDir, &next); err != nil {
+		return err
+	}
+	m.cur = next
+	return nil
+}
+
+// SeedDeepSeekKey sets the key only if none is configured yet (used to seed from
+// the environment at startup without overwriting an admin-set value).
+func (m *SettingsManager) SeedDeepSeekKey(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if strings.TrimSpace(m.cur.DeepSeekKey) == "" {
+		m.cur.DeepSeekKey = strings.TrimSpace(key)
+	}
+}
 
 // SetLimits updates the per-tier daily AI quotas (clamped to >= 0) and persists.
 func (m *SettingsManager) SetLimits(free, premium int) error {

@@ -14,19 +14,35 @@ const deepSeekURL = "https://api.deepseek.com/chat/completions"
 
 // DeepSeek is a Provider backed by the DeepSeek chat API (OpenAI-compatible).
 type DeepSeek struct {
-	apiKey string
-	model  string
-	http   *http.Client
+	keyFn func() string // resolves the current API key (may change at runtime)
+	model string
+	http  *http.Client
 }
 
-// NewDeepSeek creates a DeepSeek provider. If apiKey is empty the provider is
+// NewDeepSeek creates a DeepSeek provider. If the key is empty the provider is
 // still constructed, but Chat returns an error (AI features stay disabled).
 func NewDeepSeek(apiKey string) *DeepSeek {
 	return &DeepSeek{
-		apiKey: apiKey,
-		model:  "deepseek-chat",
-		http:   &http.Client{Timeout: 60 * time.Second},
+		keyFn: func() string { return apiKey },
+		model: "deepseek-chat",
+		http:  &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+// SetKeyFunc makes the provider resolve its API key dynamically (e.g. from an
+// admin-editable setting) so key changes take effect without a restart.
+func (d *DeepSeek) SetKeyFunc(fn func() string) {
+	if fn != nil {
+		d.keyFn = fn
+	}
+}
+
+// key returns the current API key.
+func (d *DeepSeek) key() string {
+	if d.keyFn == nil {
+		return ""
+	}
+	return d.keyFn()
 }
 
 // Name implements Provider.
@@ -34,7 +50,8 @@ func (d *DeepSeek) Name() string { return "deepseek" }
 
 // Chat implements Provider.
 func (d *DeepSeek) Chat(ctx context.Context, messages []Message) (string, error) {
-	if d.apiKey == "" {
+	key := d.key()
+	if key == "" {
 		return "", fmt.Errorf("deepseek: API key not configured")
 	}
 
@@ -60,7 +77,7 @@ func (d *DeepSeek) Chat(ctx context.Context, messages []Message) (string, error)
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+d.apiKey)
+	req.Header.Set("Authorization", "Bearer "+key)
 
 	resp, err := d.http.Do(req)
 	if err != nil {

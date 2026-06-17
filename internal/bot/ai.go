@@ -12,9 +12,18 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// aiEnabled reports whether an AI key is configured (admin setting first, then
+// the env fallback) so the menu reflects the live state.
+func (a *App) aiEnabled() bool {
+	if strings.TrimSpace(a.settings.Get().DeepSeekKey) != "" {
+		return true
+	}
+	return a.cfg != nil && strings.TrimSpace(a.cfg.DeepSeekKey) != ""
+}
+
 // aiMenuScreen lists the AI tools and the user's remaining daily quota.
 func (a *App) aiMenuScreen(userID int64) Screen {
-	if a.cfg.DeepSeekKey == "" {
+	if !a.aiEnabled() {
 		return Screen{
 			Text: "🤖 المساعد الذكي\n\n⚙️ الخدمة غير مفعّلة حالياً.\n" +
 				"يلزم ضبط مفتاح DeepSeek لتشغيل أدوات الذكاء.",

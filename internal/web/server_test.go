@@ -36,6 +36,7 @@ type fakeSettings struct {
 	paymentLink    string
 	freeLimit      int
 	premiumLimit   int
+	deepSeekKey    string
 }
 
 func (f *fakeSettings) RequiredChannel() string   { return f.channel }
@@ -60,6 +61,8 @@ func (f *fakeSettings) SetLimits(free, premium int) error {
 	f.freeLimit, f.premiumLimit = free, premium
 	return nil
 }
+func (f *fakeSettings) DeepSeekKey() string             { return f.deepSeekKey }
+func (f *fakeSettings) SetDeepSeekKey(key string) error { f.deepSeekKey = key; return nil }
 
 var errTestGate = errorString("channel required when gate enabled")
 
