@@ -433,6 +433,37 @@ func (s *Server) renderAnnouncements(w http.ResponseWriter, msg, errMsg string) 
 	writeHTML(w, announceTemplate, vm)
 }
 
+// ---------- disciplines editor ----------
+
+type disciplineRowVM struct {
+	ID    string
+	Label string
+}
+
+type disciplinesVM struct {
+	layout
+	Items    []disciplineRowVM
+	Msg, Err string
+}
+
+// renderDisciplines renders the discipline taxonomy editor.
+func (s *Server) renderDisciplines(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := disciplinesVM{Msg: msg, Err: errMsg}
+	if s.disciplines != nil {
+		for _, d := range s.disciplines.List() {
+			vm.Items = append(vm.Items, disciplineRowVM{ID: d.ID, Label: d.Label})
+		}
+	}
+	vm.layout = layout{
+		Title:     "منهل — التخصصات",
+		Heading:   "🏷️ التخصصات",
+		Sub:       "تصنيفات تُستخدَم لتصفية الإعلانات وتسجيل المستخدمين",
+		Active:    "disciplines",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, disciplinesTemplate, vm)
+}
+
 // ---------- gift codes ----------
 
 type giftRowVM struct {
@@ -921,6 +952,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
+      <a href="/admin/disciplines" class="{{if eq .Active "disciplines"}}active{{end}}">🏷️ <span class="t">التخصصات</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -1204,6 +1236,40 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
   {{else}}
   <div class="empty">لا مستخدمون بعد.</div>
   {{end}}
+</div>
+` + layoutFoot))
+
+var disciplinesTemplate = template.Must(template.New("disciplines").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="grid2">
+  <div class="card">
+    <h3>➕ إضافة تخصص</h3>
+    <form method="post" action="/admin/disciplines/add">
+      <label>المعرّف (إنجليزي قصير، مثل cs)</label>
+      <input name="id" placeholder="cs" required>
+      <label>الاسم المعروض</label>
+      <input name="label" placeholder="علوم الحاسوب" required>
+      <button class="btn block" type="submit">إضافة</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3>📋 التخصصات الحالية</h3>
+    <ul class="list">
+      {{range .Items}}
+      <li>
+        <span>{{.Label}} <span class="id">{{.ID}}</span></span>
+        <form class="inline" method="post" action="/admin/disciplines/delete" onsubmit="return confirm('حذف هذا التخصص؟');">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="btn-del" type="submit">حذف</button>
+        </form>
+      </li>
+      {{else}}
+      <li class="empty">لا تخصصات.</li>
+      {{end}}
+    </ul>
+  </div>
 </div>
 ` + layoutFoot))
 

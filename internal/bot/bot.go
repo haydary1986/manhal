@@ -37,7 +37,7 @@ type Deps struct {
 	Predators   *predator.List
 	Promotion   *promotion.Rules
 	Announce    *announce.Repo
-	Disciplines []config.Discipline
+	Disciplines *config.DisciplinesManager
 	Menu        *menu.Manager
 	Embed       embed.Provider // nil disables semantic features
 }
@@ -59,7 +59,7 @@ type App struct {
 	predators    *predator.List
 	promotion    *promotion.Rules
 	announce     *announce.Repo
-	disciplines  []config.Discipline
+	disciplines  *config.DisciplinesManager
 	menu         *menu.Manager
 	embed        embed.Provider
 	usage        *usageLimiter

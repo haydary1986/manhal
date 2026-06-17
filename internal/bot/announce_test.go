@@ -23,7 +23,7 @@ func testApp() *App {
 	return &App{
 		store:       store.NewMemory(),
 		announce:    repo,
-		disciplines: config.DefaultDisciplines(),
+		disciplines: config.NewDisciplinesManager("", config.DefaultDisciplines()),
 		sessions:    newSessions(),
 	}
 }

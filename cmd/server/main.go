@@ -49,6 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("disciplines: %v", err)
 	}
+	disciplinesMgr := config.NewDisciplinesManager(cfg.DataDir, disciplines)
 
 	announcements, err := announce.Load(cfg.DataDir)
 	if err != nil {
@@ -126,7 +127,7 @@ func main() {
 		Predators:   predators,
 		Promotion:   promotionRules,
 		Announce:    announcements,
-		Disciplines: disciplines,
+		Disciplines: disciplinesMgr,
 		Menu:        menuMgr,
 		Embed:       embedder,
 	})
@@ -143,7 +144,8 @@ func main() {
 	// is never exposed without a password. It runs independently of the bot.
 	accounts := cfg.WebAccounts()
 	if len(accounts) > 0 {
-		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements)
+		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements).
+			WithEditors(disciplinesMgr)
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

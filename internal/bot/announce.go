@@ -156,7 +156,7 @@ func (a *App) disciplinePicker(ctx context.Context, userID int64) Screen {
 	current := a.userField(ctx, userID)
 	rows := [][]Button{}
 	var pair []Button
-	for _, d := range a.disciplines {
+	for _, d := range a.disciplines.List() {
 		label := d.Label
 		if d.ID == current {
 			label = "✅ " + label

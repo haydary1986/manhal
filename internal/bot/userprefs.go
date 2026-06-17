@@ -36,5 +36,5 @@ func (a *App) fieldLabel(field string) string {
 	if field == "" {
 		return "كل التخصصات"
 	}
-	return config.DisciplineLabel(a.disciplines, field)
+	return config.DisciplineLabel(a.disciplines.List(), field)
 }

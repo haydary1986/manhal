@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/erticaz/manhal/internal/announce"
+	"github.com/erticaz/manhal/internal/config"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
 )
@@ -43,6 +44,14 @@ type Notifier interface {
 	Notify(userID int64, text string) error
 	// SendRich delivers a broadcast: optional image (URL) + optional URL button.
 	SendRich(userID int64, text, imageURL, buttonLabel, buttonURL string) error
+}
+
+// DisciplinesEditor is the editable academic-discipline taxonomy (implemented by
+// config.DisciplinesManager).
+type DisciplinesEditor interface {
+	List() []config.Discipline
+	Add(id, label string) error
+	Remove(id string) error
 }
 
 // Announcements is the editable announcements store (implemented by
@@ -107,12 +116,20 @@ var actionOptions = []struct{ Key, Label string }{
 
 // Server is the admin web adapter.
 type Server struct {
-	menu     *menu.Manager
-	data     Data
-	notifier Notifier
-	settings Settings
-	announce Announcements
-	accounts map[string]string // username -> password
+	menu        *menu.Manager
+	data        Data
+	notifier    Notifier
+	settings    Settings
+	announce    Announcements
+	disciplines DisciplinesEditor
+	accounts    map[string]string // username -> password
+}
+
+// WithEditors attaches optional reference-table editors (set from main; tests
+// that don't exercise these pages leave them nil).
+func (s *Server) WithEditors(disciplines DisciplinesEditor) *Server {
+	s.disciplines = disciplines
+	return s
 }
 
 // NewServer builds the admin server over the shared managers and data store.
@@ -143,6 +160,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
+	mux.HandleFunc("/admin/disciplines", s.auth(s.handleDisciplines))
+	mux.HandleFunc("/admin/disciplines/add", s.auth(s.handleDisciplineAdd))
+	mux.HandleFunc("/admin/disciplines/delete", s.auth(s.handleDisciplineDelete))
 	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
 	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
@@ -555,6 +575,47 @@ func genCode() string {
 		out[i] = codeAlphabet[int(x)%len(codeAlphabet)]
 	}
 	return "MNHL-" + string(out)
+}
+
+// handleDisciplines renders the discipline taxonomy editor.
+func (s *Server) handleDisciplines(w http.ResponseWriter, r *http.Request) {
+	s.renderDisciplines(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleDisciplineAdd adds a discipline.
+func (s *Server) handleDisciplineAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.disciplines == nil {
+		http.Redirect(w, r, "/admin/disciplines?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.disciplines.Add(r.FormValue("id"), r.FormValue("label")); err != nil {
+		http.Redirect(w, r, "/admin/disciplines?err="+urlencode("تعذّرت الإضافة (معرّف مكرّر أو ناقص)"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/disciplines?msg="+urlencode("تمت إضافة التخصص"), http.StatusSeeOther)
+}
+
+// handleDisciplineDelete removes a discipline.
+func (s *Server) handleDisciplineDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.disciplines == nil {
+		http.Redirect(w, r, "/admin/disciplines?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.disciplines.Remove(strings.TrimSpace(r.FormValue("id"))); err != nil {
+		http.Redirect(w, r, "/admin/disciplines?err="+urlencode("التخصص غير موجود"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/disciplines?msg="+urlencode("تم حذف التخصص"), http.StatusSeeOther)
 }
 
 // handleGiftCodes renders the gift-code generator and list.
