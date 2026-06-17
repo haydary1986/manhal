@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/erticaz/manhal/internal/announce"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
 	"github.com/erticaz/manhal/internal/store"
@@ -66,7 +67,7 @@ func testServer(t *testing.T) *Server {
 			{ID: "search", Label: "🔍 بحث", Action: "search"},
 		}},
 	})
-	return NewServer(mgr, store.NewMemory(), &fakeNotifier{}, map[string]string{"admin": "secret"}, &fakeSettings{})
+	return NewServer(mgr, store.NewMemory(), &fakeNotifier{}, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
 }
 
 func TestHealthz_NoAuth(t *testing.T) {
@@ -126,7 +127,7 @@ func TestDashboard_RendersStats(t *testing.T) {
 	_ = st.RecordUsage(context.Background(), 7, "search")
 	_ = st.RecordUsage(context.Background(), 7, "search")
 	_ = st.RecordUsage(context.Background(), 7, "cite")
-	s := NewServer(mgr, st, nil, map[string]string{"admin": "secret"}, &fakeSettings{})
+	s := NewServer(mgr, st, nil, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	req.SetBasicAuth("admin", "secret")
@@ -202,7 +203,7 @@ func TestDelete_RemovesButton(t *testing.T) {
 
 func TestAuth_MultipleAccounts(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
-	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"alice": "pw1", "bob": "pw2"}, &fakeSettings{})
+	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"alice": "pw1", "bob": "pw2"}, &fakeSettings{}, announce.NewRepo(nil))
 
 	for _, c := range []struct {
 		user, pass string
@@ -227,7 +228,7 @@ func TestSupport_ListAndReplyPushes(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
 	st := store.NewMemory()
 	notifier := &fakeNotifier{}
-	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{})
+	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
 
 	_ = st.AddTicket(context.Background(), domain.Ticket{
 		ID: "t1", UserID: 555, UserName: "باحث", Message: "كيف أصدّر مكتبتي؟",
@@ -267,7 +268,7 @@ func TestSupport_ListAndReplyPushes(t *testing.T) {
 
 func TestSupportReply_NilNotifierStillSaves(t *testing.T) {
 	st := store.NewMemory()
-	s := NewServer(menu.NewManager(t.TempDir(), nil), st, nil, map[string]string{"admin": "secret"}, &fakeSettings{})
+	s := NewServer(menu.NewManager(t.TempDir(), nil), st, nil, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
 	_ = st.AddTicket(context.Background(), domain.Ticket{ID: "x", UserID: 1, Message: "q"})
 
 	form := url.Values{"id": {"x"}, "reply": {"ans"}}
@@ -289,7 +290,7 @@ func TestUsers_ListMessageTier(t *testing.T) {
 	notifier := &fakeNotifier{}
 	_ = st.SaveUser(context.Background(), &domain.User{TelegramID: 50, Name: "علي", Tier: domain.TierFree})
 	_ = st.RecordUsage(context.Background(), 50, "search")
-	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{})
+	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
 
 	// The list page shows the user.
 	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
@@ -330,10 +331,51 @@ func TestUsers_ListMessageTier(t *testing.T) {
 	}
 }
 
+func TestAnnounce_AddAndDelete(t *testing.T) {
+	mgr := menu.NewManager(t.TempDir(), nil)
+	repo := announce.NewRepo(nil)
+	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"admin": "secret"}, &fakeSettings{}, repo)
+
+	// Publish.
+	form := url.Values{"kind": {"grant"}, "title": {"منحة بحثية"}, "body": {"تفاصيل"}, "link": {"https://x.org"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/announcements/add", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("add status = %d, want 303", rec.Code)
+	}
+	all := repo.All()
+	if len(all) != 1 || all[0].Title != "منحة بحثية" {
+		t.Fatalf("announcement not stored: %+v", all)
+	}
+
+	// The list page shows it.
+	req2 := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+	req2.SetBasicAuth("admin", "secret")
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK || !strings.Contains(rec2.Body.String(), "منحة بحثية") {
+		t.Fatalf("list page wrong: %d", rec2.Code)
+	}
+
+	// Delete.
+	del := url.Values{"id": {all[0].ID}}
+	req3 := httptest.NewRequest(http.MethodPost, "/admin/announcements/delete", strings.NewReader(del.Encode()))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req3.SetBasicAuth("admin", "secret")
+	rec3 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusSeeOther || repo.Len() != 0 {
+		t.Errorf("delete failed: code=%d len=%d", rec3.Code, repo.Len())
+	}
+}
+
 func TestSettings_SaveGate(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
 	fs := &fakeSettings{}
-	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"admin": "secret"}, fs)
+	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"admin": "secret"}, fs, announce.NewRepo(nil))
 
 	// Page renders.
 	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)

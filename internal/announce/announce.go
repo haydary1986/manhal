@@ -26,14 +26,22 @@ type Announcement struct {
 	Kind        Kind       `yaml:"kind"`
 	Title       string     `yaml:"title"`
 	Body        string     `yaml:"body"`
-	Disciplines []string   `yaml:"disciplines"` // tags; empty => general (everyone)
-	Deadline    *time.Time `yaml:"deadline"`    // optional
-	Link        string     `yaml:"link"`
+	Disciplines []string   `yaml:"disciplines"`          // tags; empty => general (everyone)
+	Deadline    *time.Time `yaml:"deadline"`             // optional
+	Link        string     `yaml:"link"`                 // optional URL button
+	Image       string     `yaml:"image,omitempty"`      // optional image URL
+	PublishAt   *time.Time `yaml:"publish_at,omitempty"` // optional schedule; hidden until then
 	PostedAt    time.Time  `yaml:"posted_at"`
 }
 
 // HasDeadline reports whether the item carries a deadline.
 func (a Announcement) HasDeadline() bool { return a.Deadline != nil }
+
+// Visible reports whether a scheduled item is due to appear yet. An item with
+// no PublishAt is always visible.
+func (a Announcement) Visible(now time.Time) bool {
+	return a.PublishAt == nil || !now.Before(*a.PublishAt)
+}
 
 // Expired reports whether the deadline has passed.
 func (a Announcement) Expired(now time.Time) bool {

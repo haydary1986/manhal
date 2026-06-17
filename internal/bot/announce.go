@@ -123,6 +123,12 @@ func renderAnnouncement(item announce.Announcement, now time.Time) string {
 		}
 		b.WriteString(line + "\n")
 	}
+	if item.Body != "" {
+		b.WriteString("   " + item.Body + "\n")
+	}
+	if item.Image != "" {
+		b.WriteString("   🖼️ " + item.Image + "\n")
+	}
 	if item.Link != "" {
 		b.WriteString("   🔗 " + item.Link)
 	}

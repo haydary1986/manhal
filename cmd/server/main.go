@@ -129,7 +129,7 @@ func main() {
 	// is never exposed without a password. It runs independently of the bot.
 	accounts := cfg.WebAccounts()
 	if len(accounts) > 0 {
-		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr)
+		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements)
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

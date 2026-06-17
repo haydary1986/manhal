@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/erticaz/manhal/internal/announce"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
 )
@@ -37,6 +38,14 @@ type Data interface {
 // Notifier pushes an admin reply back to a user (implemented by the bot).
 type Notifier interface {
 	Notify(userID int64, text string) error
+}
+
+// Announcements is the editable announcements store (implemented by
+// announce.Repo): the bot reads it, the admin web publishes/removes items.
+type Announcements interface {
+	All() []announce.Announcement
+	Add(a announce.Announcement) error
+	Remove(id string) error
 }
 
 // Settings is the editable bot configuration the admin manages (the
@@ -88,14 +97,15 @@ type Server struct {
 	data     Data
 	notifier Notifier
 	settings Settings
+	announce Announcements
 	accounts map[string]string // username -> password
 }
 
-// NewServer builds the admin server over the shared menu manager, data store
-// and settings. notifier may be nil (replies are saved but not pushed until the
-// bot is up). accounts maps usernames to passwords for Basic Auth.
-func NewServer(mgr *menu.Manager, data Data, notifier Notifier, accounts map[string]string, settings Settings) *Server {
-	return &Server{menu: mgr, data: data, notifier: notifier, settings: settings, accounts: accounts}
+// NewServer builds the admin server over the shared managers and data store.
+// notifier may be nil (replies are saved but not pushed until the bot is up).
+// accounts maps usernames to passwords for Basic Auth.
+func NewServer(mgr *menu.Manager, data Data, notifier Notifier, accounts map[string]string, settings Settings, ann Announcements) *Server {
+	return &Server{menu: mgr, data: data, notifier: notifier, settings: settings, announce: ann, accounts: accounts}
 }
 
 // Handler returns the routed, auth-protected HTTP handler.
@@ -111,6 +121,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/users", s.auth(s.handleUsers))
 	mux.HandleFunc("/admin/users/message", s.auth(s.handleUserMessage))
 	mux.HandleFunc("/admin/users/tier", s.auth(s.handleUserTier))
+	mux.HandleFunc("/admin/announcements", s.auth(s.handleAnnouncements))
+	mux.HandleFunc("/admin/announcements/add", s.auth(s.handleAnnounceAdd))
+	mux.HandleFunc("/admin/announcements/delete", s.auth(s.handleAnnounceDelete))
 	mux.HandleFunc("/admin/menu", s.auth(s.handleMenuPage))
 	mux.HandleFunc("/admin/menu/add", s.auth(s.handleAdd))
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
@@ -179,6 +192,94 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 // handleMenuPage renders the button-management page.
 func (s *Server) handleMenuPage(w http.ResponseWriter, r *http.Request) {
 	s.renderMenu(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleAnnouncements renders the announcement composer + list.
+func (s *Server) handleAnnouncements(w http.ResponseWriter, r *http.Request) {
+	s.renderAnnouncements(w, r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleAnnounceAdd publishes (or schedules) a new announcement.
+func (s *Server) handleAnnounceAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.announce == nil {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("الإعلانات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("نموذج غير صالح"), http.StatusSeeOther)
+		return
+	}
+	title := strings.TrimSpace(r.FormValue("title"))
+	kind := announce.Kind(strings.TrimSpace(r.FormValue("kind")))
+	if title == "" || !validKind(kind) {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("العنوان والنوع مطلوبان"), http.StatusSeeOther)
+		return
+	}
+	link := normalizeLink(r.FormValue("link"))
+	if r.FormValue("link") != "" && !validLink(link) {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("رابط الزر غير صالح"), http.StatusSeeOther)
+		return
+	}
+	item := announce.Announcement{
+		ID:          annID(kind),
+		Kind:        kind,
+		Title:       title,
+		Body:        strings.TrimSpace(r.FormValue("body")),
+		Link:        link,
+		Image:       normalizeLink(r.FormValue("image")),
+		Disciplines: splitCSV(r.FormValue("disciplines")),
+		PostedAt:    time.Now(),
+	}
+	if d := strings.TrimSpace(r.FormValue("deadline")); d != "" {
+		if t, err := time.ParseInLocation("2006-01-02", d, webBaghdad); err == nil {
+			item.Deadline = &t
+		}
+	}
+	if p := strings.TrimSpace(r.FormValue("publish_at")); p != "" {
+		if t, err := time.ParseInLocation("2006-01-02T15:04", p, webBaghdad); err == nil {
+			item.PublishAt = &t
+		}
+	}
+	if err := s.announce.Add(item); err != nil {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("تعذّر نشر الإعلان"), http.StatusSeeOther)
+		return
+	}
+	msg := "تم نشر الإعلان"
+	if item.PublishAt != nil {
+		msg = "تمت جدولة الإعلان"
+	}
+	http.Redirect(w, r, "/admin/announcements?msg="+urlencode(msg), http.StatusSeeOther)
+}
+
+// handleAnnounceDelete removes an announcement.
+func (s *Server) handleAnnounceDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.announce == nil {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("الإعلانات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.announce.Remove(strings.TrimSpace(r.FormValue("id"))); err != nil {
+		http.Redirect(w, r, "/admin/announcements?err="+urlencode("الإعلان غير موجود"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/announcements?msg="+urlencode("تم حذف الإعلان"), http.StatusSeeOther)
+}
+
+// validKind reports whether k is a known announcement kind.
+func validKind(k announce.Kind) bool {
+	switch k {
+	case announce.KindConference, announce.KindCFP, announce.KindGrant, announce.KindFellowship, announce.KindJob:
+		return true
+	}
+	return false
 }
 
 // handleUsers renders the user-management page (activity, message, premium).

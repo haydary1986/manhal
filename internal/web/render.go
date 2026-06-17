@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/erticaz/manhal/internal/announce"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
 )
@@ -355,6 +356,82 @@ func (s *Server) renderUsers(w http.ResponseWriter, ctx context.Context, msg, er
 	writeHTML(w, usersTemplate, vm)
 }
 
+// ---------- announcements ----------
+
+type annRowVM struct {
+	ID          string
+	KindLabel   string
+	Title       string
+	Body        string
+	Link        string
+	Image       string
+	Deadline    string
+	Schedule    string
+	Scheduled   bool
+	Disciplines string
+}
+
+type announceVM struct {
+	layout
+	Items    []annRowVM
+	Kinds    []optionVM
+	Msg, Err string
+}
+
+func annKindOptions() []optionVM {
+	return []optionVM{
+		{string(announce.KindConference), "🎓 مؤتمر"},
+		{string(announce.KindCFP), "📝 دعوة أبحاث"},
+		{string(announce.KindGrant), "💰 منحة"},
+		{string(announce.KindFellowship), "🌍 زمالة"},
+		{string(announce.KindJob), "💼 وظيفة"},
+	}
+}
+
+func annKindLabel(k announce.Kind) string {
+	for _, o := range annKindOptions() {
+		if o.Value == string(k) {
+			return o.Label
+		}
+	}
+	return "📌 إعلان"
+}
+
+// renderAnnouncements renders the announcement composer and the current list.
+func (s *Server) renderAnnouncements(w http.ResponseWriter, msg, errMsg string) {
+	vm := announceVM{Msg: msg, Err: errMsg, Kinds: annKindOptions()}
+	now := time.Now()
+	if s.announce != nil {
+		for _, a := range s.announce.All() {
+			row := annRowVM{
+				ID:          a.ID,
+				KindLabel:   annKindLabel(a.Kind),
+				Title:       a.Title,
+				Body:        a.Body,
+				Link:        a.Link,
+				Image:       a.Image,
+				Disciplines: strings.Join(a.Disciplines, "، "),
+			}
+			if a.Deadline != nil {
+				row.Deadline = a.Deadline.Format("2006-01-02")
+			}
+			if a.PublishAt != nil {
+				row.Schedule = a.PublishAt.In(webBaghdad).Format("2006-01-02 15:04")
+				row.Scheduled = now.Before(*a.PublishAt)
+			}
+			vm.Items = append(vm.Items, row)
+		}
+	}
+	vm.layout = layout{
+		Title:     "منهل — الإعلانات",
+		Heading:   "📢 الإعلانات",
+		Sub:       "نشر وجدولة وإدارة الإعلانات الأكاديمية",
+		Active:    "announce",
+		OpenBadge: s.openBadge(context.Background()),
+	}
+	writeHTML(w, announceTemplate, vm)
+}
+
 // ---------- settings (subscription gate) ----------
 
 type settingsVM struct {
@@ -473,6 +550,31 @@ func normalizeLink(s string) string {
 // validLink reports whether a normalized link has a scheme Telegram accepts.
 func validLink(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "tg://")
+}
+
+// webBaghdad is the timezone used to interpret admin-entered schedule/deadline
+// inputs, matching the analytics timezone.
+var webBaghdad = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Baghdad"); err == nil {
+		return loc
+	}
+	return time.FixedZone("Asia/Baghdad", 3*60*60)
+}()
+
+// annID derives a short unique id for a new announcement.
+func annID(kind announce.Kind) string {
+	return string(kind) + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+// splitCSV splits a comma/space separated list into trimmed, non-empty tags.
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == '،' }) {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // actionLabel maps a menu action key to its Arabic label for display.
@@ -649,6 +751,7 @@ const layoutHead = `<!doctype html>
     <nav class="nav">
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
       <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
+      <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -824,6 +927,61 @@ var supportTemplate = template.Must(template.New("support").Parse(layoutHead + `
   </div>
   {{else}}
   <div class="empty">لا توجد طلبات دعم حتى الآن.</div>
+  {{end}}
+</div>
+` + layoutFoot))
+
+var announceTemplate = template.Must(template.New("announce").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="card">
+  <h3>➕ إعلان جديد</h3>
+  <form method="post" action="/admin/announcements/add">
+    <div class="grid2">
+      <div>
+        <label>النوع</label>
+        <select name="kind">{{range .Kinds}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+        <label>العنوان</label>
+        <input name="title" placeholder="عنوان الإعلان" required>
+        <label>النص (الوصف)</label>
+        <textarea name="body" rows="3" placeholder="تفاصيل الإعلان..."></textarea>
+        <label>التخصصات (اختياري، افصل بفاصلة — فارغ = للجميع)</label>
+        <input name="disciplines" placeholder="cs، eng، med">
+      </div>
+      <div>
+        <label>زر برابط (اختياري)</label>
+        <input name="link" placeholder="https://example.org/apply">
+        <label>رابط صورة (اختياري)</label>
+        <input name="image" placeholder="https://example.org/banner.jpg">
+        <label>آخر موعد (اختياري)</label>
+        <input type="date" name="deadline">
+        <label>جدولة النشر (اختياري — توقيت بغداد)</label>
+        <input type="datetime-local" name="publish_at">
+      </div>
+    </div>
+    <button class="btn block" type="submit">نشر / جدولة الإعلان</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>📋 الإعلانات الحالية</h3>
+  {{range .Items}}
+  <div class="ticket">
+    <div class="meta">{{.KindLabel}}{{if .Scheduled}} · ⏳ مجدوَل: {{.Schedule}}{{else if .Schedule}} · 🕒 نُشر: {{.Schedule}}{{end}}{{if .Deadline}} · 🗓️ آخر موعد: {{.Deadline}}{{end}}{{if .Disciplines}} · 🎯 {{.Disciplines}}{{end}}</div>
+    <div style="font-weight:600;margin-bottom:4px">{{.Title}}</div>
+    {{if .Body}}<div class="msg">{{.Body}}</div>{{end}}
+    <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;font-size:13px">
+      {{if .Link}}<span>🔗 {{.Link}}</span>{{end}}
+      {{if .Image}}<span>🖼️ {{.Image}}</span>{{end}}
+    </div>
+    <form class="inline" method="post" action="/admin/announcements/delete" onsubmit="return confirm('حذف هذا الإعلان؟');" style="margin-top:10px">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <button class="btn-del" type="submit">حذف</button>
+    </form>
+  </div>
+  {{else}}
+  <div class="empty">لا توجد إعلانات بعد.</div>
   {{end}}
 </div>
 ` + layoutFoot))
