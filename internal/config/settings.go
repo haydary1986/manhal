@@ -29,6 +29,9 @@ type BotSettings struct {
 	PremiumAILimit int `yaml:"premium_ai_limit"`
 	// API key managed from the admin page (seeded from the env at first run).
 	DeepSeekKey string `yaml:"deepseek_key"`
+	// Bot identity applied via the Telegram API on startup (name/description).
+	BotName        string `yaml:"bot_name"`
+	BotDescription string `yaml:"bot_description"`
 }
 
 // DefaultBotSettings is the seed used when no file is present.
@@ -136,6 +139,29 @@ func (m *SettingsManager) PremiumAILimit() int { return m.Get().PremiumAILimit }
 
 // DeepSeekKey returns the current DeepSeek API key.
 func (m *SettingsManager) DeepSeekKey() string { return m.Get().DeepSeekKey }
+
+// WelcomeMessage / BotName / BotDescription expose the bot's identity & greeting.
+func (m *SettingsManager) WelcomeMessage() string { return m.Get().WelcomeMessage }
+func (m *SettingsManager) BotName() string        { return m.Get().BotName }
+func (m *SettingsManager) BotDescription() string { return m.Get().BotDescription }
+
+// SetIdentity updates the greeting (live) and the bot name/description (applied
+// to Telegram on next start) and persists them.
+func (m *SettingsManager) SetIdentity(welcome, name, description string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.cur
+	if w := strings.TrimSpace(welcome); w != "" {
+		next.WelcomeMessage = w
+	}
+	next.BotName = strings.TrimSpace(name)
+	next.BotDescription = strings.TrimSpace(description)
+	if err := SaveBotSettings(m.dataDir, &next); err != nil {
+		return err
+	}
+	m.cur = next
+	return nil
+}
 
 // SetDeepSeekKey updates and persists the DeepSeek API key.
 func (m *SettingsManager) SetDeepSeekKey(key string) error {

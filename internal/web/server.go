@@ -65,6 +65,10 @@ type Settings interface {
 	SetLimits(free, premium int) error
 	DeepSeekKey() string
 	SetDeepSeekKey(key string) error
+	WelcomeMessage() string
+	BotName() string
+	BotDescription() string
+	SetIdentity(welcome, name, description string) error
 }
 
 // actionOptions are the leaf actions an admin can attach to a button, plus the
@@ -144,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/settings/payment", s.auth(s.handleSetPayment))
 	mux.HandleFunc("/admin/settings/limits", s.auth(s.handleSetLimits))
 	mux.HandleFunc("/admin/settings/apikey", s.auth(s.handleSetAPIKey))
+	mux.HandleFunc("/admin/settings/identity", s.auth(s.handleSetIdentity))
 	return mux
 }
 
@@ -510,6 +515,27 @@ func (s *Server) handleSetAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ مفتاح DeepSeek — فعّال فوراً"), http.StatusSeeOther)
+}
+
+// handleSetIdentity saves the bot greeting + name/description.
+func (s *Server) handleSetIdentity(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.settings == nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("الإعدادات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	welcome := strings.TrimSpace(r.FormValue("welcome"))
+	name := strings.TrimSpace(r.FormValue("bot_name"))
+	desc := strings.TrimSpace(r.FormValue("bot_description"))
+	if err := s.settings.SetIdentity(welcome, name, desc); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("تعذّر حفظ الهوية"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ هوية البوت ورسالته (الاسم/الوصف يُطبَّقان عند النشر)"), http.StatusSeeOther)
 }
 
 // handleBroadcast renders the broadcast composer.

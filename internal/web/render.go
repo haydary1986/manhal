@@ -509,6 +509,9 @@ type settingsVM struct {
 	FreeLimit      int
 	PremiumLimit   int
 	DeepSeekKeySet bool
+	Welcome        string
+	BotName        string
+	BotDescription string
 	Msg, Err       string
 }
 
@@ -524,6 +527,9 @@ func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg,
 		vm.FreeLimit = s.settings.FreeAILimit()
 		vm.PremiumLimit = s.settings.PremiumAILimit()
 		vm.DeepSeekKeySet = strings.TrimSpace(s.settings.DeepSeekKey()) != ""
+		vm.Welcome = s.settings.WelcomeMessage()
+		vm.BotName = s.settings.BotName()
+		vm.BotDescription = s.settings.BotDescription()
 	}
 	vm.layout = layout{
 		Title:     "منهل — الإعدادات",
@@ -1181,6 +1187,23 @@ var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead +
     {{if .Require}}<span class="tag">مُفعّل ✅</span>{{else}}<span class="tag">مُعطّل</span>{{end}}
     {{if .Channel}} · القناة: <b>{{.Channel}}</b>{{end}}
   </div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <h3>🪪 هوية البوت ورسائله</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 12px;line-height:1.7">
+    رسالة الترحيب تُطبَّق <b>فوراً</b>. الاسم والوصف يُطبَّقان على تلكرام عند النشر.
+    <br>💡 <b>صورة البوت</b> تُغيَّر فقط من @BotFather (قيد تيليجرام).
+  </p>
+  <form method="post" action="/admin/settings/identity">
+    <label>رسالة الترحيب (تظهر في القائمة الرئيسية)</label>
+    <textarea name="welcome" rows="3" placeholder="أهلاً بك في منهل 🎓...">{{.Welcome}}</textarea>
+    <label>اسم البوت</label>
+    <input name="bot_name" value="{{.BotName}}" placeholder="منهل — مساعدك الأكاديمي">
+    <label>وصف البوت (What can this bot do?)</label>
+    <textarea name="bot_description" rows="2" placeholder="بوت يجمع أدوات البحث والدراسة الأكاديمية...">{{.BotDescription}}</textarea>
+    <button class="btn" type="submit">💾 حفظ الهوية</button>
+  </form>
 </div>
 
 <div class="card" style="max-width:640px">

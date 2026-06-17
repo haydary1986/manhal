@@ -136,6 +136,7 @@ func main() {
 	var notifier web.Notifier
 	if err == nil {
 		notifier = app
+		app.ApplyIdentity(ctx) // push admin-set bot name/description to Telegram
 	}
 
 	// Admin web server. Disabled unless at least one account exists, so the panel

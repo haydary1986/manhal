@@ -42,6 +42,9 @@ type fakeSettings struct {
 	freeLimit      int
 	premiumLimit   int
 	deepSeekKey    string
+	welcome        string
+	botName        string
+	botDesc        string
 }
 
 func (f *fakeSettings) RequiredChannel() string   { return f.channel }
@@ -68,6 +71,13 @@ func (f *fakeSettings) SetLimits(free, premium int) error {
 }
 func (f *fakeSettings) DeepSeekKey() string             { return f.deepSeekKey }
 func (f *fakeSettings) SetDeepSeekKey(key string) error { f.deepSeekKey = key; return nil }
+func (f *fakeSettings) WelcomeMessage() string          { return f.welcome }
+func (f *fakeSettings) BotName() string                 { return f.botName }
+func (f *fakeSettings) BotDescription() string          { return f.botDesc }
+func (f *fakeSettings) SetIdentity(welcome, name, description string) error {
+	f.welcome, f.botName, f.botDesc = welcome, name, description
+	return nil
+}
 
 var errTestGate = errorString("channel required when gate enabled")
 
