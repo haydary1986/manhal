@@ -147,6 +147,23 @@ func (m *Memory) UsageTotals(_ context.Context) (int, int, error) {
 	return len(m.events), len(seen), nil
 }
 
+// UserEvents returns a user's recent actions, newest first.
+func (m *Memory) UserEvents(_ context.Context, userID int64, limit int) ([]domain.UsageEvent, error) {
+	m.mu.RLock()
+	out := make([]domain.UsageEvent, 0)
+	for _, e := range m.events {
+		if e.userID == userID {
+			out = append(out, domain.UsageEvent{Action: e.action, At: e.at})
+		}
+	}
+	m.mu.RUnlock()
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // UsageByWeekday buckets events by weekday in Baghdad time (Sunday=0..Saturday=6).
 func (m *Memory) UsageByWeekday(_ context.Context) ([7]int, error) {
 	var out [7]int

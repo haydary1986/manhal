@@ -357,6 +357,48 @@ func (s *Server) renderUsers(w http.ResponseWriter, ctx context.Context, msg, er
 	writeHTML(w, usersTemplate, vm)
 }
 
+// ---------- user activity report ----------
+
+type activityRowVM struct {
+	Action string
+	When   string
+}
+
+type activityVM struct {
+	layout
+	UserName string
+	UserID   string
+	Last     string // "where they stopped"
+	Events   []activityRowVM
+}
+
+// renderUserActivity shows one user's recent actions (newest first) so the admin
+// can see what they used and where they stopped.
+func (s *Server) renderUserActivity(w http.ResponseWriter, ctx context.Context, userID int64) {
+	vm := activityVM{UserID: strconv.FormatInt(userID, 10), UserName: "مستخدم"}
+	if u, err := s.data.GetUser(ctx, userID); err == nil && u != nil {
+		vm.UserName = nameOr(u.Name)
+	}
+	events, _ := s.data.UserEvents(ctx, userID, 150)
+	for _, e := range events {
+		vm.Events = append(vm.Events, activityRowVM{
+			Action: actionLabel(e.Action),
+			When:   e.At.In(webBaghdad).Format("2006-01-02 15:04"),
+		})
+	}
+	if len(vm.Events) > 0 {
+		vm.Last = vm.Events[0].Action + " · " + vm.Events[0].When
+	}
+	vm.layout = layout{
+		Title:     "منهل — نشاط المستخدم",
+		Heading:   "📋 سجلّ نشاط المستخدم",
+		Sub:       "ماذا استخدم وأين توقّف (بتوقيت بغداد)",
+		Active:    "users",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, activityTemplate, vm)
+}
+
 // ---------- announcements ----------
 
 type annRowVM struct {
@@ -1169,6 +1211,24 @@ var supportTemplate = template.Must(template.New("support").Parse(layoutHead + `
 {{end}}
 ` + layoutFoot))
 
+var activityTemplate = template.Must(template.New("activity").Parse(layoutHead + `
+<p style="margin:0 0 14px"><a href="/admin/users" class="tag" style="text-decoration:none">← المستخدمون</a></p>
+<div class="card">
+  <h3>👤 {{.UserName}} <span class="r-id">#{{.UserID}}</span></h3>
+  {{if .Last}}<div class="peak-note">📍 آخر نشاط (حيث توقّف): <b>{{.Last}}</b></div>{{end}}
+</div>
+<div class="card">
+  <h3>🧭 المسار الزمني <span class="tag">الأحدث أولاً</span></h3>
+  <ul class="list">
+    {{range .Events}}
+    <li><span>{{.Action}}</span><span class="r-id">{{.When}}</span></li>
+    {{else}}
+    <li class="empty">لا نشاط مُسجّل لهذا المستخدم بعد.</li>
+    {{end}}
+  </ul>
+</div>
+` + layoutFoot))
+
 var announceTemplate = template.Must(template.New("announce").Parse(layoutHead + `
 {{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
@@ -1263,6 +1323,9 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
         <button class="btn" type="submit">تحديث الاشتراك</button>
         <div style="font-size:12px;color:#94a3b8;margin-top:8px">انضمّ: {{.Joined}}</div>
       </form>
+    </div>
+    <div style="padding:0 16px 14px">
+      <a href="/admin/users/activity?id={{.ID}}" class="tag" style="text-decoration:none">📋 سجلّ النشاط (ماذا استخدم وأين توقّف)</a>
     </div>
   </details>
   {{else}}

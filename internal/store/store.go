@@ -67,6 +67,8 @@ type Store interface {
 	RecordUsage(ctx context.Context, userID int64, action string) error
 	// FeatureUsage returns per-action totals, most-used first.
 	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
+	// UserEvents returns a user's recent actions, newest first (for diagnosis).
+	UserEvents(ctx context.Context, userID int64, limit int) ([]domain.UsageEvent, error)
 	// TopUsers returns the most active users by total actions, capped at limit.
 	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
 	// UsageTotals returns the total recorded actions and the number of distinct

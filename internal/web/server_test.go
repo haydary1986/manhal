@@ -424,6 +424,30 @@ func TestAnnounce_AddAndDelete(t *testing.T) {
 	}
 }
 
+func TestUserActivity_Page(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	_ = st.SaveUser(ctx, &domain.User{TelegramID: 50, Name: "علي"})
+	_ = st.RecordUsage(ctx, 50, "search")
+	_ = st.RecordUsage(ctx, 50, "cite")
+	s := NewServer(menu.NewManager(t.TempDir(), nil), st, &fakeNotifier{},
+		map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/users/activity?id=50", nil)
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"علي", "سجلّ نشاط", "آخر نشاط"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("activity page missing %q", want)
+		}
+	}
+}
+
 func TestSettings_SaveGate(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
 	fs := &fakeSettings{}

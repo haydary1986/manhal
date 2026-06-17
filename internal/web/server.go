@@ -34,6 +34,7 @@ type Data interface {
 	AddGiftCode(ctx context.Context, g domain.GiftCode) error
 	ListGiftCodes(ctx context.Context) ([]domain.GiftCode, error)
 	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
+	UserEvents(ctx context.Context, userID int64, limit int) ([]domain.UsageEvent, error)
 	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
 	UsageTotals(ctx context.Context) (actions int, activeUsers int, err error)
 	UsageByWeekday(ctx context.Context) ([7]int, error)
@@ -166,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin", s.auth(s.handleDashboard))
 	mux.HandleFunc("/admin/users", s.auth(s.handleUsers))
 	mux.HandleFunc("/admin/users/message", s.auth(s.handleUserMessage))
+	mux.HandleFunc("/admin/users/activity", s.auth(s.handleUserActivity))
 	mux.HandleFunc("/admin/users/tier", s.auth(s.handleUserTier))
 	mux.HandleFunc("/admin/announcements", s.auth(s.handleAnnouncements))
 	mux.HandleFunc("/admin/announcements/add", s.auth(s.handleAnnounceAdd))
@@ -365,6 +367,12 @@ func validKind(k announce.Kind) bool {
 // handleUsers renders the user-management page (activity, message, premium).
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	s.renderUsers(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleUserActivity renders a single user's action timeline for diagnosis.
+func (s *Server) handleUserActivity(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("id")), 10, 64)
+	s.renderUserActivity(w, r.Context(), id)
 }
 
 // handleUserMessage pushes an admin message to a user via the bot.

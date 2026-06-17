@@ -211,6 +211,25 @@ func (p *Postgres) UsageTotals(ctx context.Context) (int, int, error) {
 	return actions, active, err
 }
 
+// UserEvents returns a user's recent actions, newest first.
+func (p *Postgres) UserEvents(ctx context.Context, userID int64, limit int) ([]domain.UsageEvent, error) {
+	const q = `SELECT action, at FROM usage_events WHERE user_id = $1 ORDER BY at DESC LIMIT $2`
+	rows, err := p.pool.Query(ctx, q, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.UsageEvent
+	for rows.Next() {
+		var e domain.UsageEvent
+		if err := rows.Scan(&e.Action, &e.At); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // UsageByWeekday buckets events by weekday in Baghdad time (Sunday=0..Saturday=6).
 func (p *Postgres) UsageByWeekday(ctx context.Context) ([7]int, error) {
 	var out [7]int

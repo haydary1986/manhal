@@ -72,4 +72,16 @@ func TestMemoryUsageAnalytics(t *testing.T) {
 	if sum != 5 {
 		t.Errorf("hour sum = %d, want 5", sum)
 	}
+
+	// UserEvents returns only that user's actions.
+	ev, _ := m.UserEvents(ctx, 1, 50)
+	if len(ev) != 4 { // user 1 did search x3 + cite x1
+		t.Errorf("user 1 events = %d, want 4", len(ev))
+	}
+	if ev2, _ := m.UserEvents(ctx, 2, 50); len(ev2) != 1 {
+		t.Errorf("user 2 events = %d, want 1", len(ev2))
+	}
+	if ev3, _ := m.UserEvents(ctx, 999, 50); len(ev3) != 0 {
+		t.Errorf("unknown user events = %d, want 0", len(ev3))
+	}
 }
