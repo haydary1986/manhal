@@ -109,7 +109,7 @@ func New(d Deps) (*App, error) {
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "search:cite:", tg.MatchTypePrefix, a.handleSearchCite)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "author:profile:", tg.MatchTypePrefix, a.handleAuthorProfile)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "ai:tool:", tg.MatchTypePrefix, a.handleAITool)
-	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "promo:rank:", tg.MatchTypePrefix, a.handlePromotion)
+	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "promo:", tg.MatchTypePrefix, a.handlePromotion)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "stats:test:", tg.MatchTypePrefix, a.handleStats)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "lib:", tg.MatchTypePrefix, a.handleLibrary)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "sub:", tg.MatchTypePrefix, a.handleFollow)
@@ -231,6 +231,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	case stateAwaitPromotion:
 		a.handlePromotionActivities(ctx, msg)
+		return
+	case stateAwaitPromoCount:
+		a.handlePromoCount(ctx, msg)
 		return
 	case stateAwaitPublish:
 		a.sessions.clear(msg.From.ID)

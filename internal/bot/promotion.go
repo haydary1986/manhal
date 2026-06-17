@@ -25,7 +25,8 @@ func (a *App) promotionRankScreen() Screen {
 	}
 }
 
-// handlePromotion routes "promo:" callbacks (rank selection).
+// handlePromotion routes all "promo:" callbacks: rank choice, the method
+// chooser, and the interactive builder (categories/items/compute).
 func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Update) {
 	cq := update.CallbackQuery
 	if cq == nil {
@@ -36,15 +37,59 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 		a.send(ctx, cq.From.ID, gateScreen(a.settings.Get()))
 		return
 	}
+	userID := cq.From.ID
+	data := strings.TrimPrefix(cq.Data, "promo:")
 
-	rankKey := strings.TrimPrefix(cq.Data, "promo:rank:")
-	rank, ok := a.promotion.FindRank(rankKey)
-	if !ok {
-		a.send(ctx, cq.From.ID, a.promotionRankScreen())
-		return
+	switch {
+	case strings.HasPrefix(data, "rank:"):
+		rank, ok := a.promotion.FindRank(strings.TrimPrefix(data, "rank:"))
+		if !ok {
+			a.send(ctx, userID, a.promotionRankScreen())
+			return
+		}
+		a.sessions.promoBegin(userID, rank.Key)
+		a.send(ctx, userID, a.promoMethodScreen(rank))
+	case strings.HasPrefix(data, "build:"):
+		rank, ok := a.promotion.FindRank(strings.TrimPrefix(data, "build:"))
+		if !ok {
+			return
+		}
+		a.sessions.promoBegin(userID, rank.Key)
+		a.send(ctx, userID, a.promoHomeScreen(userID, rank))
+	case strings.HasPrefix(data, "text:"):
+		rank, ok := a.promotion.FindRank(strings.TrimPrefix(data, "text:"))
+		if !ok {
+			return
+		}
+		a.sessions.startPromotion(userID, rank.Key)
+		a.send(ctx, userID, a.promotionInputScreen(rank))
+	case strings.HasPrefix(data, "cat:"):
+		rank, ok := a.promotion.FindRank(a.sessions.promoteRank(userID))
+		if !ok {
+			a.send(ctx, userID, a.promotionRankScreen())
+			return
+		}
+		idx, _ := strconv.Atoi(strings.TrimPrefix(data, "cat:"))
+		a.send(ctx, userID, a.promoCategoryScreen(userID, rank, idx))
+	case strings.HasPrefix(data, "add:"):
+		a.promoAskCount(ctx, userID, strings.TrimPrefix(data, "add:"))
+	case data == "home", data == "reset":
+		if data == "reset" {
+			a.sessions.promoResetDraft(userID)
+		}
+		rank, ok := a.promotion.FindRank(a.sessions.promoteRank(userID))
+		if !ok {
+			a.send(ctx, userID, a.promotionRankScreen())
+			return
+		}
+		a.send(ctx, userID, a.promoHomeScreen(userID, rank))
+	case data == "done":
+		res := a.computeDraft(a.sessions.promoteRank(userID), a.sessions.promoDraftCounts(userID))
+		a.sessions.clear(userID)
+		a.send(ctx, userID, promotionResultScreen(res))
+	default:
+		a.send(ctx, userID, a.promotionRankScreen())
 	}
-	a.sessions.startPromotion(cq.From.ID, rankKey)
-	a.send(ctx, cq.From.ID, a.promotionInputScreen(rank))
 }
 
 // promotionInputScreen lists the official requirements and the activity keys

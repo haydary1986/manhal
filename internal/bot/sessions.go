@@ -22,6 +22,7 @@ const (
 	stateAwaitAdminLabel  sessionState = "await_admin_label"
 	stateAwaitAIInput     sessionState = "await_ai_input"
 	stateAwaitPromotion   sessionState = "await_promotion"
+	stateAwaitPromoCount  sessionState = "await_promo_count"
 	stateAwaitPublish     sessionState = "await_publish"
 	stateAwaitLitReview   sessionState = "await_litreview"
 	stateAwaitStats       sessionState = "await_stats"
@@ -41,17 +42,19 @@ const (
 // session holds one user's conversational context: the wizard state plus the
 // most recent search/author results, referenced by index from inline buttons.
 type session struct {
-	state       sessionState
-	results     []scholar.SearchResult
-	authors     []scholar.Author
-	adminParent string          // parent id for an in-progress "add button" wizard
-	adminLabel  string          // label captured during the "add button" wizard
-	aiTool      string          // active AI tool key while awaiting input
-	promoteRank string          // chosen rank key while awaiting promotion activities
-	statsTest   string          // chosen statistical test while awaiting data
-	lastWork    *cite.Work      // most recent fetched citation, for "save to library"
-	lastAuthor  *scholar.Author // most recent viewed author profile, for citation-watch
-	pdfChunks   []pdfChunk      // embedded chunks of the active PDF (RAG, #24)
+	state        sessionState
+	results      []scholar.SearchResult
+	authors      []scholar.Author
+	adminParent  string             // parent id for an in-progress "add button" wizard
+	adminLabel   string             // label captured during the "add button" wizard
+	aiTool       string             // active AI tool key while awaiting input
+	promoteRank  string             // chosen rank key while awaiting promotion activities
+	promoDraft   map[string]float64 // accumulated counts in the interactive builder
+	promoPending string             // activity key awaiting a count in the builder
+	statsTest    string             // chosen statistical test while awaiting data
+	lastWork     *cite.Work         // most recent fetched citation, for "save to library"
+	lastAuthor   *scholar.Author    // most recent viewed author profile, for citation-watch
+	pdfChunks    []pdfChunk         // embedded chunks of the active PDF (RAG, #24)
 }
 
 // sessions is a concurrency-safe map of Telegram user ID -> session.
@@ -201,6 +204,77 @@ func (s *sessions) promoteRank(userID int64) string {
 		return e.promoteRank
 	}
 	return ""
+}
+
+// promoBegin starts the interactive builder for a rank with a fresh draft.
+func (s *sessions) promoBegin(userID int64, rankKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entry(userID)
+	e.state = stateNone
+	e.promoteRank = rankKey
+	e.promoDraft = map[string]float64{}
+	e.promoPending = ""
+}
+
+// promoAwaitCount marks an activity key as awaiting its count from the user.
+func (s *sessions) promoAwaitCount(userID int64, key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entry(userID)
+	e.state = stateAwaitPromoCount
+	e.promoPending = key
+}
+
+// promoPendingKey returns the key awaiting a count ("" if none).
+func (s *sessions) promoPendingKey(userID int64) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.m[userID]; e != nil {
+		return e.promoPending
+	}
+	return ""
+}
+
+// promoSetCount records (or clears, when n<=0) the count for a key and exits the
+// awaiting-count state.
+func (s *sessions) promoSetCount(userID int64, key string, n float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entry(userID)
+	if e.promoDraft == nil {
+		e.promoDraft = map[string]float64{}
+	}
+	if n > 0 {
+		e.promoDraft[key] = n
+	} else {
+		delete(e.promoDraft, key)
+	}
+	e.promoPending = ""
+	e.state = stateNone
+}
+
+// promoDraftCounts returns a copy of the current draft counts.
+func (s *sessions) promoDraftCounts(userID int64) map[string]float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := map[string]float64{}
+	if e := s.m[userID]; e != nil {
+		for k, v := range e.promoDraft {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// promoResetDraft clears the draft counts but keeps the chosen rank.
+func (s *sessions) promoResetDraft(userID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.m[userID]; e != nil {
+		e.promoDraft = map[string]float64{}
+		e.promoPending = ""
+	}
 }
 
 // startStats records the chosen statistical test and awaits the data message.
