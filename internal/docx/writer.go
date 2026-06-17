@@ -20,11 +20,16 @@ const relsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </Relationships>`
 
 // Build creates a minimal but valid .docx from plain text, one paragraph per
-// line. Paragraphs are right-aligned with RTL bidi so Arabic renders correctly.
+// line. Each paragraph's direction is detected from its first strong-directional
+// character: Arabic/Hebrew → RTL + right alignment, Latin → LTR + left.
 func Build(text string) ([]byte, error) {
 	var body strings.Builder
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		body.WriteString(`<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>`)
+		if isRTL(line) {
+			body.WriteString(`<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>`)
+		} else {
+			body.WriteString(`<w:p><w:pPr><w:jc w:val="left"/></w:pPr>`)
+		}
 		if t := strings.TrimSpace(line); t != "" {
 			body.WriteString(`<w:r><w:t xml:space="preserve">` + escapeXML(line) + `</w:t></w:r>`)
 		}
@@ -56,6 +61,26 @@ func Build(text string) ([]byte, error) {
 		return nil, fmt.Errorf("docx close: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// isRTL reports whether a line's paragraph direction is right-to-left, using the
+// Unicode "first strong character" rule: the first Arabic/Hebrew letter means
+// RTL, the first Latin letter means LTR. Defaults to LTR (English) when neither.
+func isRTL(line string) bool {
+	for _, r := range line {
+		switch {
+		case (r >= 0x0590 && r <= 0x05FF), // Hebrew
+			(r >= 0x0600 && r <= 0x06FF), // Arabic
+			(r >= 0x0750 && r <= 0x077F), // Arabic Supplement
+			(r >= 0x08A0 && r <= 0x08FF), // Arabic Extended-A
+			(r >= 0xFB50 && r <= 0xFDFF), // Arabic Presentation Forms-A
+			(r >= 0xFE70 && r <= 0xFEFF): // Arabic Presentation Forms-B
+			return true
+		case (r >= 'A' && r <= 'Z'), (r >= 'a' && r <= 'z'):
+			return false
+		}
+	}
+	return false
 }
 
 func escapeXML(s string) string {

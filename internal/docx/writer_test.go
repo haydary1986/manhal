@@ -26,3 +26,18 @@ func TestBuildRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestIsRTL(t *testing.T) {
+	cases := map[string]bool{
+		"مرحبا بالعالم":        true,
+		"Hello world":          false,
+		"123 then English abc": false, // first strong char is Latin
+		"123 ثم عربي":          true,  // first strong char is Arabic
+		"":                     false,
+	}
+	for in, want := range cases {
+		if got := isRTL(in); got != want {
+			t.Errorf("isRTL(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
