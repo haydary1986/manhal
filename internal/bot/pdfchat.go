@@ -17,7 +17,8 @@ const (
 	pdfChunkRunes   = 1000 // chunk size in runes
 	pdfChunkOverlap = 150  // overlap between chunks
 	pdfMaxChunks    = 150  // cap embeddings per document
-	pdfTopK         = 5    // chunks retrieved per question
+	pdfTopK         = 8    // chunks retrieved per question
+	pdfAllChunksMax = 16   // when a doc has ≤ this many chunks, send them all
 	pdfMaxFileSize  = 8 << 20
 )
 
@@ -27,9 +28,10 @@ type pdfChunk struct {
 	vector []float32
 }
 
-const ragSystemPrompt = "أنت مساعد يجيب عن أسئلة حول ورقة بحثية بالاعتماد الحصري على المقاطع المرفقة منها. " +
-	"إن لم تكن الإجابة موجودة في المقاطع، قل بوضوح: «لا تتوفّر هذه المعلومة في الورقة». " +
-	"لا تختلق ولا تستعن بمعرفة خارجية. أجب بالعربية بإيجاز ودقّة."
+const ragSystemPrompt = "أنت مساعد يجيب عن أسئلة حول ورقة بحثية بالاعتماد على المقاطع المرفقة منها. " +
+	"استخرج الإجابة من المقاطع، ويمكنك الاستنتاج المعقول والتلخيص مما ورد فيها. " +
+	"إن كانت المعلومة غائبة تماماً عن كل المقاطع فقل: «لا تتوفّر هذه المعلومة في المقاطع المتاحة». " +
+	"لا تختلق حقائق أو أرقاماً من خارج الورقة. أجب بالعربية بإيجاز ودقّة."
 
 // pdfChatPromptScreen asks for a PDF to chat with.
 func pdfChatPromptScreen() Screen {
@@ -130,7 +132,12 @@ func (a *App) handlePdfQuestion(ctx context.Context, msg *models.Message) {
 		return
 	}
 
-	top := topChunks(chunks, qv, pdfTopK)
+	// Small documents: hand the model everything (avoids retrieval misses,
+	// especially with lighter embedding models). Larger ones: retrieve top-K.
+	top := chunks
+	if len(chunks) > pdfAllChunksMax {
+		top = topChunks(chunks, qv, pdfTopK)
+	}
 	a.send(ctx, chatID, Screen{Text: "⏳ أبحث في الورقة..."})
 
 	callCtx, cancel2 := context.WithTimeout(ctx, 120*time.Second)
