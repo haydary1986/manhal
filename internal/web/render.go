@@ -433,6 +433,57 @@ func (s *Server) renderAnnouncements(w http.ResponseWriter, msg, errMsg string) 
 	writeHTML(w, announceTemplate, vm)
 }
 
+// ---------- gift codes ----------
+
+type giftRowVM struct {
+	Code       string
+	TierLabel  string
+	Days       string
+	Used       bool
+	RedeemedBy string
+}
+
+type giftVM struct {
+	layout
+	Codes    []giftRowVM
+	Total    int
+	Used     int
+	Msg, Err string
+}
+
+// renderGiftCodes renders the gift-code generator and the list of codes.
+func (s *Server) renderGiftCodes(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := giftVM{Msg: msg, Err: errMsg}
+	codes, _ := s.data.ListGiftCodes(ctx)
+	vm.Total = len(codes)
+	for _, g := range codes {
+		days := "دائم"
+		if g.Days > 0 {
+			days = strconv.Itoa(g.Days) + " يوم"
+		}
+		redeemed := ""
+		if g.Used() {
+			vm.Used++
+			redeemed = "#" + strconv.FormatInt(g.RedeemedBy, 10)
+		}
+		vm.Codes = append(vm.Codes, giftRowVM{
+			Code:       g.Code,
+			TierLabel:  tierLabel(string(g.Tier)),
+			Days:       days,
+			Used:       g.Used(),
+			RedeemedBy: redeemed,
+		})
+	}
+	vm.layout = layout{
+		Title:     "منهل — أكواد الهدية",
+		Heading:   "🎁 أكواد الهدية",
+		Sub:       "ولّد أكواد بريميم يستبدلها المستخدمون في البوت",
+		Active:    "gift",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, giftTemplate, vm)
+}
+
 // ---------- broadcast ----------
 
 type broadcastVM struct {
@@ -869,6 +920,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
+      <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -1152,6 +1204,53 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
   {{else}}
   <div class="empty">لا مستخدمون بعد.</div>
   {{end}}
+</div>
+` + layoutFoot))
+
+var giftTemplate = template.Must(template.New("gift").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="stats">
+  <div class="stat"><div class="num">{{.Total}}</div><div class="lbl">🎁 إجمالي الأكواد</div></div>
+  <div class="stat"><div class="num">{{.Used}}</div><div class="lbl">✅ مستبدَلة</div></div>
+</div>
+
+<div class="card" style="max-width:560px">
+  <h3>➕ توليد أكواد</h3>
+  <form method="post" action="/admin/giftcodes/generate">
+    <div class="grid2">
+      <div>
+        <label>الباقة</label>
+        <select name="tier">
+          <option value="researcher">باحث (بريميم)</option>
+          <option value="student">طالب (بريميم)</option>
+        </select>
+      </div>
+      <div>
+        <label>المدة (يوم — 0 = دائم)</label>
+        <input type="number" name="days" min="0" value="30">
+      </div>
+    </div>
+    <label>الكمية (حتى 100)</label>
+    <input type="number" name="quantity" min="1" max="100" value="10">
+    <button class="btn block" type="submit">🎁 توليد الأكواد</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>📋 الأكواد</h3>
+  <ul class="list">
+    {{range .Codes}}
+    <li>
+      <span><code style="font-family:monospace;font-weight:700;{{if .Used}}text-decoration:line-through;color:#94a3b8{{end}}">{{.Code}}</code>
+        <span class="tag">{{.TierLabel}}</span> <span class="id">{{.Days}}</span></span>
+      <span>{{if .Used}}<span class="r-id">استُبدل {{.RedeemedBy}}</span>{{else}}<span class="tag">متاح</span>{{end}}</span>
+    </li>
+    {{else}}
+    <li class="empty">لا أكواد بعد.</li>
+    {{end}}
+  </ul>
 </div>
 ` + layoutFoot))
 

@@ -28,6 +28,7 @@ const (
 	stateAwaitStats       sessionState = "await_stats"
 	stateAwaitLatexFile   sessionState = "await_latex_file"
 	stateAwaitSupport     sessionState = "await_support"
+	stateAwaitGiftCode    sessionState = "await_gift_code"
 	stateAwaitFollowTopic sessionState = "await_follow_topic"
 	stateAwaitTrend       sessionState = "await_trend"
 	stateAwaitGap         sessionState = "await_gap"

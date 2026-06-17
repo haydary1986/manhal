@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,42 @@ func TestBroadcastTargets(t *testing.T) {
 	free := broadcastTargets(users, "free", now)
 	if len(free) != 2 {
 		t.Errorf("free => %v, want 2 users", free)
+	}
+}
+
+func TestGiftCodes_Generate(t *testing.T) {
+	st := store.NewMemory()
+	s := NewServer(menu.NewManager(t.TempDir(), nil), st, &fakeNotifier{},
+		map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
+
+	form := url.Values{"tier": {"researcher"}, "days": {"30"}, "quantity": {"5"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/giftcodes/generate", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("generate status = %d, want 303", rec.Code)
+	}
+	codes, _ := st.ListGiftCodes(context.Background())
+	if len(codes) != 5 {
+		t.Errorf("generated %d codes, want 5", len(codes))
+	}
+	for _, g := range codes {
+		if g.Tier != domain.TierResearcher || g.Days != 30 {
+			t.Errorf("bad code: %+v", g)
+		}
+	}
+
+	// A free tier is rejected.
+	bad := url.Values{"tier": {"free"}, "quantity": {"3"}}
+	req2 := httptest.NewRequest(http.MethodPost, "/admin/giftcodes/generate", strings.NewReader(bad.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.SetBasicAuth("admin", "secret")
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req2)
+	if !strings.Contains(rec2.Header().Get("Location"), "err=") {
+		t.Error("free tier should be rejected")
 	}
 }
 

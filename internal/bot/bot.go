@@ -100,7 +100,7 @@ func New(d Deps) (*App, error) {
 	b.RegisterHandler(tg.HandlerTypeMessageText, "/start", tg.MatchTypeExact, a.handleStart)
 	b.RegisterHandler(tg.HandlerTypeMessageText, "/admin", tg.MatchTypeExact, a.handleAdminCommand)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "gate:check", tg.MatchTypeExact, a.handleGateCheck)
-	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "premium:request", tg.MatchTypeExact, a.handlePremiumRequest)
+	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "premium:", tg.MatchTypePrefix, a.handlePremium)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "menu:", tg.MatchTypePrefix, a.handleMenu)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "nav:", tg.MatchTypePrefix, a.handleNav)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "admin:", tg.MatchTypePrefix, a.handleAdmin)
@@ -250,6 +250,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		// Keep the user in support mode so they can keep chatting; they leave by
 		// tapping a menu button.
 		a.handleSupportMessage(ctx, msg)
+		return
+	case stateAwaitGiftCode:
+		a.handleGiftCode(ctx, msg)
 		return
 	case stateAwaitFollowTopic:
 		a.sessions.clear(msg.From.ID)

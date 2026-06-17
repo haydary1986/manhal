@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"errors"
 	"net/http"
@@ -28,6 +29,8 @@ type Data interface {
 	ListLibrary(ctx context.Context, userID int64) ([]domain.LibraryItem, error)
 	ListAllSubscriptions(ctx context.Context) ([]domain.Subscription, error)
 	ListAllCitationWatches(ctx context.Context) ([]domain.CitationWatch, error)
+	AddGiftCode(ctx context.Context, g domain.GiftCode) error
+	ListGiftCodes(ctx context.Context) ([]domain.GiftCode, error)
 	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
 	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
 	UsageTotals(ctx context.Context) (actions int, activeUsers int, err error)
@@ -140,6 +143,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
+	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
+	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
 	mux.HandleFunc("/admin/broadcast/send", s.auth(s.handleBroadcastSend))
 	mux.HandleFunc("/admin/logs", s.auth(s.handleLogs))
@@ -536,6 +541,57 @@ func (s *Server) handleSetIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ هوية البوت ورسالته (الاسم/الوصف يُطبَّقان عند النشر)"), http.StatusSeeOther)
+}
+
+// codeAlphabet excludes easily-confused characters (0/O, 1/I, etc.).
+const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+// genCode returns a random, readable gift code like "MNHL-AB7K2QPD".
+func genCode() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	out := make([]byte, len(b))
+	for i, x := range b {
+		out[i] = codeAlphabet[int(x)%len(codeAlphabet)]
+	}
+	return "MNHL-" + string(out)
+}
+
+// handleGiftCodes renders the gift-code generator and list.
+func (s *Server) handleGiftCodes(w http.ResponseWriter, r *http.Request) {
+	s.renderGiftCodes(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleGenerateCodes mints a batch of premium gift codes.
+func (s *Server) handleGenerateCodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	_ = r.ParseForm()
+	tier := domain.Tier(strings.TrimSpace(r.FormValue("tier")))
+	if !validTier(tier) || tier == domain.TierFree {
+		http.Redirect(w, r, "/admin/giftcodes?err="+urlencode("اختر باقة مميّزة (طالب/باحث)"), http.StatusSeeOther)
+		return
+	}
+	days, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("days")))
+	if days < 0 {
+		days = 0
+	}
+	qty, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("quantity")))
+	if qty < 1 {
+		qty = 1
+	}
+	if qty > 100 {
+		qty = 100
+	}
+	n := 0
+	for i := 0; i < qty; i++ {
+		if err := s.data.AddGiftCode(r.Context(), domain.GiftCode{Code: genCode(), Tier: tier, Days: days}); err == nil {
+			n++
+		}
+	}
+	http.Redirect(w, r, "/admin/giftcodes?msg="+urlencode("تم توليد "+strconv.Itoa(n)+" كوداً"), http.StatusSeeOther)
 }
 
 // handleBroadcast renders the broadcast composer.

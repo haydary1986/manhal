@@ -13,6 +13,9 @@ import (
 // ErrNotFound is returned when a record does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrCodeUsed is returned when redeeming an already-claimed gift code.
+var ErrCodeUsed = errors.New("gift code already used")
+
 // Store is the persistence interface.
 type Store interface {
 	GetUser(ctx context.Context, telegramID int64) (*domain.User, error)
@@ -50,6 +53,14 @@ type Store interface {
 	RemoveSubscription(ctx context.Context, userID int64, id string) error
 	// UpdateSubscriptionSeen replaces the dedup memory of a subscription.
 	UpdateSubscriptionSeen(ctx context.Context, id string, seen []string) error
+
+	// AddGiftCode stores a new redeemable gift code.
+	AddGiftCode(ctx context.Context, g domain.GiftCode) error
+	// ListGiftCodes returns all gift codes, newest first.
+	ListGiftCodes(ctx context.Context) ([]domain.GiftCode, error)
+	// RedeemGiftCode atomically claims an unused code for a user, returning it.
+	// Returns ErrNotFound if absent, ErrCodeUsed if already claimed.
+	RedeemGiftCode(ctx context.Context, code string, userID int64) (domain.GiftCode, error)
 
 	// RecordUsage increments the usage counter for (user, action). Best-effort
 	// analytics: callers ignore the error so tracking never breaks a feature.

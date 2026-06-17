@@ -71,7 +71,15 @@ CREATE TABLE IF NOT EXISTS usage_events (
 );
 CREATE INDEX IF NOT EXISTS usage_events_action_idx ON usage_events (action);
 CREATE INDEX IF NOT EXISTS usage_events_user_idx ON usage_events (user_id);
-CREATE INDEX IF NOT EXISTS usage_events_at_idx ON usage_events (at);`
+CREATE INDEX IF NOT EXISTS usage_events_at_idx ON usage_events (at);
+CREATE TABLE IF NOT EXISTS gift_codes (
+  code        TEXT PRIMARY KEY,
+  tier        TEXT NOT NULL,
+  days        INTEGER NOT NULL DEFAULT 0,
+  redeemed_by BIGINT NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  redeemed_at TIMESTAMPTZ
+);`
 
 // Postgres is a Store backed by PostgreSQL (pgx/v5).
 type Postgres struct {
@@ -93,6 +101,55 @@ func NewPostgres(ctx context.Context, dsn string) (*Postgres, error) {
 		return nil, fmt.Errorf("postgres schema: %w", err)
 	}
 	return &Postgres{pool: pool}, nil
+}
+
+// AddGiftCode stores a new gift code.
+func (p *Postgres) AddGiftCode(ctx context.Context, g domain.GiftCode) error {
+	const q = `INSERT INTO gift_codes (code, tier, days) VALUES ($1, $2, $3)`
+	_, err := p.pool.Exec(ctx, q, g.Code, string(g.Tier), g.Days)
+	return err
+}
+
+// ListGiftCodes returns all gift codes, newest first.
+func (p *Postgres) ListGiftCodes(ctx context.Context) ([]domain.GiftCode, error) {
+	const q = `SELECT code, tier, days, redeemed_by, created_at, redeemed_at
+	           FROM gift_codes ORDER BY created_at DESC`
+	rows, err := p.pool.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.GiftCode
+	for rows.Next() {
+		var g domain.GiftCode
+		var tier string
+		if err := rows.Scan(&g.Code, &tier, &g.Days, &g.RedeemedBy, &g.CreatedAt, &g.RedeemedAt); err != nil {
+			return nil, err
+		}
+		g.Tier = domain.Tier(tier)
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// RedeemGiftCode atomically claims an unused code for a user.
+func (p *Postgres) RedeemGiftCode(ctx context.Context, code string, userID int64) (domain.GiftCode, error) {
+	const q = `UPDATE gift_codes SET redeemed_by = $2, redeemed_at = now()
+	           WHERE code = $1 AND redeemed_by = 0
+	           RETURNING code, tier, days, redeemed_by, created_at, redeemed_at`
+	var g domain.GiftCode
+	var tier string
+	err := p.pool.QueryRow(ctx, q, code, userID).Scan(&g.Code, &tier, &g.Days, &g.RedeemedBy, &g.CreatedAt, &g.RedeemedAt)
+	if err != nil {
+		// Distinguish "missing" from "already used" for a clear bot message.
+		var exists bool
+		if e2 := p.pool.QueryRow(ctx, `SELECT true FROM gift_codes WHERE code = $1`, code).Scan(&exists); e2 == nil && exists {
+			return domain.GiftCode{}, ErrCodeUsed
+		}
+		return domain.GiftCode{}, ErrNotFound
+	}
+	g.Tier = domain.Tier(tier)
+	return g, nil
 }
 
 // RecordUsage stores a timestamped feature-invocation event.

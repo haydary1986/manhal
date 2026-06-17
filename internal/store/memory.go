@@ -19,7 +19,8 @@ type Memory struct {
 	subs      []domain.Subscription
 	reminders map[string]bool // "userID:key" -> sent
 	watches   []domain.CitationWatch
-	events    []usageEvent // one row per feature invocation
+	events    []usageEvent               // one row per feature invocation
+	gifts     map[string]domain.GiftCode // code -> gift
 }
 
 // usageEvent is a single recorded feature invocation.
@@ -35,7 +36,49 @@ func NewMemory() *Memory {
 		users:     make(map[int64]domain.User),
 		library:   make(map[int64][]domain.LibraryItem),
 		reminders: make(map[string]bool),
+		gifts:     make(map[string]domain.GiftCode),
 	}
+}
+
+// AddGiftCode stores a new gift code.
+func (m *Memory) AddGiftCode(_ context.Context, g domain.GiftCode) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if g.CreatedAt.IsZero() {
+		g.CreatedAt = time.Now()
+	}
+	m.gifts[g.Code] = g
+	return nil
+}
+
+// ListGiftCodes returns all gift codes, newest first.
+func (m *Memory) ListGiftCodes(_ context.Context) ([]domain.GiftCode, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]domain.GiftCode, 0, len(m.gifts))
+	for _, g := range m.gifts {
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+// RedeemGiftCode atomically claims an unused code for a user.
+func (m *Memory) RedeemGiftCode(_ context.Context, code string, userID int64) (domain.GiftCode, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.gifts[code]
+	if !ok {
+		return domain.GiftCode{}, ErrNotFound
+	}
+	if g.Used() {
+		return domain.GiftCode{}, ErrCodeUsed
+	}
+	now := time.Now()
+	g.RedeemedBy = userID
+	g.RedeemedAt = &now
+	m.gifts[code] = g
+	return g, nil
 }
 
 // RecordUsage appends a timestamped feature-invocation event.
