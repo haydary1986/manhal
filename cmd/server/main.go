@@ -19,6 +19,7 @@ import (
 	"github.com/erticaz/manhal/internal/journal"
 	"github.com/erticaz/manhal/internal/logbuf"
 	"github.com/erticaz/manhal/internal/menu"
+	"github.com/erticaz/manhal/internal/pexels"
 	"github.com/erticaz/manhal/internal/predator"
 	"github.com/erticaz/manhal/internal/promotion"
 	"github.com/erticaz/manhal/internal/scholar"
@@ -133,6 +134,7 @@ func main() {
 		Embed:       embedder,
 		Related:     openAlex,
 		Retraction:  crossref,
+		Pexels:      pexels.New(cfg.PexelsKey),
 	})
 
 	// The bot acts as the push notifier for admin support replies; nil when the

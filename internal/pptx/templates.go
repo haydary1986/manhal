@@ -16,10 +16,16 @@ const slideLayoutRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 	`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
 	`</Relationships>`
 
-const slideRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-	`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
-	`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
-	`</Relationships>`
+// slideRels links a slide to the layout, plus its image when present (rId2).
+func slideRels(slideNum string, hasImage bool) string {
+	rels := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+		`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`
+	if hasImage {
+		rels += `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image` + slideNum + `.jpeg"/>`
+	}
+	return rels + `</Relationships>`
+}
 
 const emptySpTree = `<p:spTree>` +
 	`<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +

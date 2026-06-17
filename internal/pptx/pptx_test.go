@@ -3,10 +3,45 @@ package pptx
 import (
 	"archive/zip"
 	"bytes"
+	"image"
+	"image/jpeg"
 	"io"
 	"strings"
 	"testing"
 )
+
+func TestBuildWithImage(t *testing.T) {
+	var jb bytes.Buffer
+	if err := jpeg.Encode(&jb, image.NewRGBA(image.Rect(0, 0, 8, 6)), nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := Build("Deck", []Slide{{Title: "S1", Bullets: []string{"b"}, Image: jb.Bytes()}})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	files := map[string]string{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		files[f.Name] = string(b)
+	}
+	// First content slide is slide2 → its image is media/image2.jpeg.
+	if _, ok := files["ppt/media/image2.jpeg"]; !ok {
+		t.Error("missing embedded image media part")
+	}
+	if !strings.Contains(files["ppt/slides/slide2.xml"], "<p:pic>") ||
+		!strings.Contains(files["ppt/slides/slide2.xml"], `r:embed="rId2"`) {
+		t.Error("slide missing picture referencing rId2")
+	}
+	if !strings.Contains(files["ppt/slides/_rels/slide2.xml.rels"], "image2.jpeg") {
+		t.Error("slide rels missing image relationship")
+	}
+	if !strings.Contains(files["[Content_Types].xml"], `Extension="jpeg"`) {
+		t.Error("content types missing jpeg default")
+	}
+}
 
 func TestBuild(t *testing.T) {
 	data, err := Build("عرضي التقديمي", []Slide{

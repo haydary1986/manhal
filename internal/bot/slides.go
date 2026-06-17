@@ -15,10 +15,17 @@ import (
 
 const slidesMaxRunes = 12000
 
+// PhotoSource fetches a stock photo for a query (implemented by pexels.Client).
+type PhotoSource interface {
+	Enabled() bool
+	Photo(ctx context.Context, query string) ([]byte, error)
+}
+
 const slidesSystemPrompt = "أنت مصمّم عروض تقديمية أكاديمية. من النص المُعطى أنشئ مخطّط عرض تقديمي مترابط. " +
 	"أعد JSON فقط بهذا الشكل بالضبط دون أي نص خارجه:\n" +
-	`{"title":"عنوان العرض","slides":[{"title":"عنوان الشريحة","bullets":["نقطة موجزة","نقطة موجزة"]}]}` + "\n" +
-	"من 6 إلى 10 شرائح، كل شريحة 3–5 نقاط قصيرة وواضحة، بنفس لغة النص. اعتمد على النص فقط."
+	`{"title":"عنوان العرض","slides":[{"title":"عنوان الشريحة","bullets":["نقطة موجزة","نقطة موجزة"],"image":"english search keyword"}]}` + "\n" +
+	"من 6 إلى 10 شرائح، كل شريحة 3–5 نقاط قصيرة وواضحة بنفس لغة النص. " +
+	"حقل image: كلمة/عبارة بحث بالإنجليزية تمثّل موضوع الشريحة بصرياً لجلب صورة مناسبة. اعتمد على النص فقط."
 
 // slidesPromptScreen invites text or a document to turn into a deck.
 func slidesPromptScreen() Screen {
@@ -95,14 +102,35 @@ func (a *App) makeSlides(ctx context.Context, chatID, userID int64, text string)
 
 	a.send(ctx, chatID, Screen{Text: "🎬 جاري إنشاء العرض التقديمي..."})
 	octx, cancel := context.WithTimeout(ctx, 150*time.Second)
-	title, slides, err := a.slideOutline(octx, text)
+	title, specs, err := a.slideOutline(octx, text)
 	cancel()
-	if err != nil || len(slides) == 0 {
+	if err != nil || len(specs) == 0 {
 		a.logf("slides outline: %v", err)
 		a.send(ctx, chatID, Screen{Text: "❌ تعذّر إنشاء مخطّط العرض، جرّب نصاً أوضح.", Keyboard: slidesNav()})
 		return
 	}
 	a.usage.record(userID)
+
+	withImages := a.pexels != nil && a.pexels.Enabled()
+	if withImages {
+		a.send(ctx, chatID, Screen{Text: "🎨 جاري جلب الصور المناسبة..."})
+	}
+	slides := make([]pptx.Slide, 0, len(specs))
+	for _, sp := range specs {
+		ps := pptx.Slide{Title: sp.Title, Bullets: sp.Bullets}
+		if withImages {
+			query := sp.Image
+			if strings.TrimSpace(query) == "" {
+				query = sp.Title
+			}
+			ictx, c := context.WithTimeout(ctx, 20*time.Second)
+			if img, ierr := a.pexels.Photo(ictx, query); ierr == nil {
+				ps.Image = img
+			}
+			c()
+		}
+		slides = append(slides, ps)
+	}
 
 	deck, err := pptx.Build(title, slides)
 	if err != nil {
@@ -113,8 +141,15 @@ func (a *App) makeSlides(ctx context.Context, chatID, userID int64, text string)
 	a.sendDocument(ctx, chatID, "presentation.pptx", deck, "✅ عرضك التقديمي جاهز (افتحه في PowerPoint للتعديل):")
 }
 
+// slideSpec is one slide from the AI outline, with an English image keyword.
+type slideSpec struct {
+	Title   string
+	Bullets []string
+	Image   string
+}
+
 // slideOutline asks the model for a JSON deck outline and parses it.
-func (a *App) slideOutline(ctx context.Context, text string) (string, []pptx.Slide, error) {
+func (a *App) slideOutline(ctx context.Context, text string) (string, []slideSpec, error) {
 	out, err := a.ai.Chat(ctx, []ai.Message{
 		{Role: "system", Content: slidesSystemPrompt},
 		{Role: "user", Content: text},
@@ -127,19 +162,20 @@ func (a *App) slideOutline(ctx context.Context, text string) (string, []pptx.Sli
 		Slides []struct {
 			Title   string   `json:"title"`
 			Bullets []string `json:"bullets"`
+			Image   string   `json:"image"`
 		} `json:"slides"`
 	}
 	if err := json.Unmarshal([]byte(extractJSONObject(out)), &doc); err != nil {
 		return "", nil, err
 	}
-	slides := make([]pptx.Slide, 0, len(doc.Slides))
+	specs := make([]slideSpec, 0, len(doc.Slides))
 	for _, s := range doc.Slides {
-		slides = append(slides, pptx.Slide{Title: s.Title, Bullets: s.Bullets})
+		specs = append(specs, slideSpec{Title: s.Title, Bullets: s.Bullets, Image: s.Image})
 	}
 	if doc.Title == "" {
 		doc.Title = "العرض التقديمي"
 	}
-	return doc.Title, slides, nil
+	return doc.Title, specs, nil
 }
 
 // extractJSONObject returns the substring from the first { to the last },

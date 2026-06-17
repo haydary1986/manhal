@@ -8,14 +8,18 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
+	"image"
+	_ "image/jpeg" // register JPEG decoder for DecodeConfig
 	"strconv"
 	"strings"
 )
 
-// Slide is one slide's content.
+// Slide is one slide's content. Image (optional JPEG bytes) is shown on the
+// right; bullets move to the left half when an image is present.
 type Slide struct {
 	Title   string
 	Bullets []string
+	Image   []byte
 }
 
 // Build returns the bytes of a .pptx deck. The first slide is a title slide for
@@ -55,11 +59,17 @@ func Build(deckTitle string, slides []Slide) ([]byte, error) {
 	}
 	for i, s := range all {
 		n := strconv.Itoa(i + 1)
-		if err := write("ppt/slides/slide"+n+".xml", slideXML(s, i == 0)); err != nil {
+		hasImg := len(s.Image) > 0
+		if err := write("ppt/slides/slide"+n+".xml", slideXML(s, i == 0, hasImg)); err != nil {
 			return nil, err
 		}
-		if err := write("ppt/slides/_rels/slide"+n+".xml.rels", slideRels); err != nil {
+		if err := write("ppt/slides/_rels/slide"+n+".xml.rels", slideRels(n, hasImg)); err != nil {
 			return nil, err
+		}
+		if hasImg {
+			if err := write("ppt/media/image"+n+".jpeg", string(s.Image)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -74,6 +84,7 @@ func contentTypes(nSlides int) string {
 		`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
 		`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
 		`<Default Extension="xml" ContentType="application/xml"/>` +
+		`<Default Extension="jpeg" ContentType="image/jpeg"/>` +
 		`<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>` +
 		`<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>` +
 		`<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>` +
@@ -123,25 +134,42 @@ func presentationRels(nSlides int) string {
 	return b.String()
 }
 
-// slideXML renders one slide with explicit title + body text boxes.
-func slideXML(s Slide, isTitle bool) string {
+// slideXML renders one slide with explicit title + body text boxes, optionally
+// with an image on the right (bullets move to the left half).
+func slideXML(s Slide, isTitle, hasImage bool) string {
 	titleSize, titleY := "3600", "2057400"
 	if !isTitle {
 		titleSize, titleY = "3200", "457200"
 	}
-	var body strings.Builder
+
+	// Body box: full width normally; left half when an image shares the slide.
+	bodyX, bodyCx := "685800", "10820400"
+	if hasImage {
+		bodyX, bodyCx = "685800", "5105400"
+	}
+
+	var shapes strings.Builder
 	if !isTitle {
-		body.WriteString(`<p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>` +
-			`<p:spPr><a:xfrm><a:off x="685800" y="1714500"/><a:ext cx="10820400" cy="4572000"/></a:xfrm>` +
+		shapes.WriteString(`<p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>` +
+			`<p:spPr><a:xfrm><a:off x="` + bodyX + `" y="1714500"/><a:ext cx="` + bodyCx + `" cy="4572000"/></a:xfrm>` +
 			`<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>` +
 			`<p:txBody><a:bodyPr/><a:lstStyle/>`)
 		if len(s.Bullets) == 0 {
-			body.WriteString(`<a:p/>`)
+			shapes.WriteString(`<a:p/>`)
 		}
 		for _, bl := range s.Bullets {
-			body.WriteString(para("• "+bl, "2000", false, dirRTL(bl)))
+			shapes.WriteString(para("• "+bl, "2000", false, dirRTL(bl)))
 		}
-		body.WriteString(`</p:txBody></p:sp>`)
+		shapes.WriteString(`</p:txBody></p:sp>`)
+	}
+	if hasImage {
+		ox, oy, cx, cy := imageExtent(s.Image, 6400800, 1714500, 5105400, 4572000)
+		shapes.WriteString(`<p:pic><p:nvPicPr><p:cNvPr id="4" name="Image"/>` +
+			`<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
+			`<p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+			`<p:spPr><a:xfrm><a:off x="` + strconv.Itoa(ox) + `" y="` + strconv.Itoa(oy) + `"/>` +
+			`<a:ext cx="` + strconv.Itoa(cx) + `" cy="` + strconv.Itoa(cy) + `"/></a:xfrm>` +
+			`<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`)
 	}
 
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -154,8 +182,27 @@ func slideXML(s Slide, isTitle bool) string {
 		`<p:spPr><a:xfrm><a:off x="685800" y="` + titleY + `"/><a:ext cx="10820400" cy="1143000"/></a:xfrm>` +
 		`<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>` +
 		`<p:txBody><a:bodyPr/><a:lstStyle/>` + para(s.Title, titleSize, true, dirRTL(s.Title)) + `</p:txBody></p:sp>` +
-		body.String() +
+		shapes.String() +
 		`</p:spTree></p:cSld></p:sld>`
+}
+
+// imageExtent fits a JPEG inside the box (EMU) preserving aspect, centered.
+func imageExtent(jpeg []byte, boxX, boxY, boxCx, boxCy int) (ox, oy, cx, cy int) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(jpeg))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return boxX, boxY, boxCx, boxCy
+	}
+	const emuPerPx = 9525
+	iw, ih := cfg.Width*emuPerPx, cfg.Height*emuPerPx
+	f := float64(boxCx) / float64(iw)
+	if fy := float64(boxCy) / float64(ih); fy < f {
+		f = fy
+	}
+	cx = int(float64(iw) * f)
+	cy = int(float64(ih) * f)
+	ox = boxX + (boxCx-cx)/2
+	oy = boxY + (boxCy-cy)/2
+	return ox, oy, cx, cy
 }
 
 // para builds one <a:p> with alignment/direction for the given text.

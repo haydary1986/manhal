@@ -42,6 +42,7 @@ type Deps struct {
 	Embed       embed.Provider    // nil disables semantic features
 	Related     RelatedSource     // similar-papers lookup
 	Retraction  RetractionChecker // retracted-paper check
+	Pexels      PhotoSource       // presentation images (nil/disabled => text-only decks)
 }
 
 // App wires the Telegram adapter with the core dependencies.
@@ -66,6 +67,7 @@ type App struct {
 	embed        embed.Provider
 	related      RelatedSource
 	retraction   RetractionChecker
+	pexels       PhotoSource
 	usage        *usageLimiter
 	sessions     *sessions
 }
@@ -92,6 +94,7 @@ func New(d Deps) (*App, error) {
 		embed:        d.Embed,
 		related:      d.Related,
 		retraction:   d.Retraction,
+		pexels:       d.Pexels,
 		sessions:     newSessions(),
 	}
 	// Tier-aware daily AI quota (free vs premium), resolved per user at call time.
