@@ -41,15 +41,16 @@ func (a *App) menuItems(id string) []menu.Item {
 func menuKeyboard(items []menu.Item, withBack bool) *Keyboard {
 	rows := [][]Button{}
 	var row []Button
-	for _, it := range items {
+	for i, it := range items {
+		num := strconv.Itoa(i+1) + ". " // sequential number so users can refer to a service by its number
 		var b Button
 		switch {
 		case it.IsSubmenu():
-			b = Button{Text: "📁 " + it.Label, Data: "nav:" + it.ID}
+			b = Button{Text: num + "📁 " + it.Label, Data: "nav:" + it.ID}
 		case it.IsLink():
-			b = Button{Text: it.Label, URL: it.URL}
+			b = Button{Text: num + it.Label, URL: it.URL}
 		default:
-			b = Button{Text: it.Label, Data: "menu:" + it.Action}
+			b = Button{Text: num + it.Label, Data: "menu:" + it.Action}
 		}
 		row = append(row, b)
 		if len(row) == 2 {
