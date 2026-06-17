@@ -247,7 +247,8 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		a.handleStatsData(ctx, msg)
 		return
 	case stateAwaitSupport:
-		a.sessions.clear(msg.From.ID)
+		// Keep the user in support mode so they can keep chatting; they leave by
+		// tapping a menu button.
 		a.handleSupportMessage(ctx, msg)
 		return
 	case stateAwaitFollowTopic:

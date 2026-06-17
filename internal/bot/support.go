@@ -47,7 +47,8 @@ func (a *App) handleSupportMessage(ctx context.Context, msg *models.Message) {
 		return
 	}
 	a.send(ctx, chatID, Screen{
-		Text:     "✅ وصل طلبك إلى فريق الدعم.\nسنراجعه ونرد عليك هنا قريباً. شكراً لتواصلك 🌸",
+		Text: "✅ وصلت رسالتك إلى فريق الدعم.\n" +
+			"أرسل المزيد لمتابعة المحادثة، وسنرد عليك هنا. اضغط «⬅️ رجوع» عند الانتهاء.",
 		Keyboard: supportNav(),
 	})
 }

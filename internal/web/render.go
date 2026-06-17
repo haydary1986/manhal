@@ -545,39 +545,75 @@ func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg,
 
 type ticketVM struct {
 	ID       string
-	UserName string
-	UserID   string
 	Message  string
 	Reply    string
 	Created  string
 	Answered bool
 }
 
+// supportThreadVM is one user's whole support conversation.
+type supportThreadVM struct {
+	UserName string
+	UserID   string
+	Open     bool
+	Items    []ticketVM
+}
+
 type supportVM struct {
 	layout
-	Tickets   []ticketVM
+	Threads   []supportThreadVM
 	OpenCount int
 	Msg, Err  string
 }
 
-// renderSupport writes the support panel.
+// renderSupport groups tickets into per-user conversation threads so the admin
+// can follow a continuous back-and-forth.
 func (s *Server) renderSupport(w http.ResponseWriter, tickets []domain.Ticket, msg, errMsg string) {
 	vm := supportVM{Msg: msg, Err: errMsg}
+
+	// Chronological order so each thread reads top-to-bottom.
+	sort.SliceStable(tickets, func(i, j int) bool {
+		return tickets[i].CreatedAt.Before(tickets[j].CreatedAt)
+	})
+
+	byUser := map[int64]*supportThreadVM{}
+	var order []int64
 	for _, t := range tickets {
 		answered := t.Status == domain.TicketAnswered
 		if !answered {
 			vm.OpenCount++
 		}
-		vm.Tickets = append(vm.Tickets, ticketVM{
+		th := byUser[t.UserID]
+		if th == nil {
+			th = &supportThreadVM{UserName: nameOr(t.UserName), UserID: strconv.FormatInt(t.UserID, 10)}
+			byUser[t.UserID] = th
+			order = append(order, t.UserID)
+		}
+		if t.UserName != "" {
+			th.UserName = nameOr(t.UserName)
+		}
+		if !answered {
+			th.Open = true
+		}
+		th.Items = append(th.Items, ticketVM{
 			ID:       t.ID,
-			UserName: nameOr(t.UserName),
-			UserID:   strconv.FormatInt(t.UserID, 10),
 			Message:  t.Message,
 			Reply:    t.Reply,
 			Created:  t.CreatedAt.Format("2006-01-02 15:04"),
 			Answered: answered,
 		})
 	}
+	// Open threads first (a FIFO support queue), then resolved ones.
+	var open, closed []supportThreadVM
+	for _, uid := range order {
+		if byUser[uid].Open {
+			open = append(open, *byUser[uid])
+		} else {
+			closed = append(closed, *byUser[uid])
+		}
+	}
+	vm.Threads = append(open, closed...)
+
 	badge := ""
 	if vm.OpenCount > 0 {
 		badge = strconv.Itoa(vm.OpenCount)
@@ -585,7 +621,7 @@ func (s *Server) renderSupport(w http.ResponseWriter, tickets []domain.Ticket, m
 	vm.layout = layout{
 		Title:     "منهل — الدعم الفني",
 		Heading:   "📨 الدعم الفني",
-		Sub:       "طلبات الباحثين والردّ المباشر عليها",
+		Sub:       "محادثات الباحثين المتواصلة والردّ عليها",
 		Active:    "support",
 		OpenBadge: badge,
 	}
@@ -991,26 +1027,30 @@ var supportTemplate = template.Must(template.New("support").Parse(layoutHead + `
 {{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
 
+<p style="color:#64748b;font-size:14px;margin:0 0 16px">📨 {{.OpenCount}} محادثة مفتوحة — كل بطاقة هي محادثة متواصلة مع مستخدم.</p>
+
+{{range .Threads}}
 <div class="card">
-  <h3>📨 طلبات الدعم <span class="tag">{{.OpenCount}} مفتوح</span></h3>
-  {{range .Tickets}}
+  <h3>👤 {{.UserName}} <span class="r-id">#{{.UserID}}</span> {{if .Open}}<span class="tag">مفتوحة</span>{{else}}<span class="tag">تمت الإجابة</span>{{end}}</h3>
+  {{range .Items}}
   <div class="ticket {{if .Answered}}done{{else}}open{{end}}">
-    <div class="meta">👤 {{.UserName}} · ID {{.UserID}} · {{.Created}} {{if .Answered}}· ✅ تمت الإجابة{{end}}</div>
-    <div class="msg">{{.Message}}</div>
+    <div class="meta">🕒 {{.Created}}</div>
+    <div class="msg">👤 {{.Message}}</div>
     {{if .Answered}}
       <div class="rep">↩️ {{.Reply}}</div>
     {{else}}
-      <form method="post" action="/admin/support/reply">
+      <form method="post" action="/admin/support/reply" style="margin-top:8px">
         <input type="hidden" name="id" value="{{.ID}}">
-        <textarea name="reply" rows="3" placeholder="اكتب ردّك على الباحث..." required></textarea>
+        <textarea name="reply" rows="2" placeholder="ردّك على هذه الرسالة..." required></textarea>
         <button class="btn" type="submit">إرسال الرد</button>
       </form>
     {{end}}
   </div>
-  {{else}}
-  <div class="empty">لا توجد طلبات دعم حتى الآن.</div>
   {{end}}
 </div>
+{{else}}
+<div class="card"><div class="empty">لا توجد محادثات دعم حتى الآن.</div></div>
+{{end}}
 ` + layoutFoot))
 
 var announceTemplate = template.Must(template.New("announce").Parse(layoutHead + `

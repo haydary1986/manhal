@@ -292,6 +292,32 @@ func TestSupport_ListAndReplyPushes(t *testing.T) {
 	}
 }
 
+func TestSupport_GroupsByUser(t *testing.T) {
+	mgr := menu.NewManager(t.TempDir(), nil)
+	st := store.NewMemory()
+	s := NewServer(mgr, st, &fakeNotifier{}, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))
+	ctx := context.Background()
+	_ = st.AddTicket(ctx, domain.Ticket{ID: "a", UserID: 7, UserName: "علي", Message: "سؤال أول"})
+	_ = st.AddTicket(ctx, domain.Ticket{ID: "b", UserID: 7, UserName: "علي", Message: "سؤال ثانٍ"})
+	_ = st.AddTicket(ctx, domain.Ticket{ID: "c", UserID: 9, UserName: "سارة", Message: "استفسار"})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/support", nil)
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{"علي", "سؤال أول", "سؤال ثانٍ", "سارة", "استفسار"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("threaded support missing %q", want)
+		}
+	}
+	// User 7's two messages must appear under a SINGLE thread header.
+	if c := strings.Count(body, "#7</span>"); c != 1 {
+		t.Errorf("user 7 should be one thread header, got %d occurrences", c)
+	}
+}
+
 func TestSupportReply_NilNotifierStillSaves(t *testing.T) {
 	st := store.NewMemory()
 	s := NewServer(menu.NewManager(t.TempDir(), nil), st, nil, map[string]string{"admin": "secret"}, &fakeSettings{}, announce.NewRepo(nil))

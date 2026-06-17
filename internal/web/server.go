@@ -488,7 +488,7 @@ func (s *Server) handleSupportReply(w http.ResponseWriter, r *http.Request) {
 	msg := "تم حفظ الرد وإرساله للمستخدم."
 	if s.notifier == nil {
 		msg = "تم حفظ الرد (سيُرسَل عند تشغيل البوت)."
-	} else if err := s.notifier.Notify(ticket.UserID, "📨 رد فريق الدعم على طلبك:\n\n"+reply); err != nil {
+	} else if err := s.notifier.Notify(ticket.UserID, "📨 رد فريق الدعم:\n\n"+reply+"\n\n💬 للمتابعة، افتح «📞 الدعم الفني» واكتب ردّك."); err != nil {
 		msg = "تم حفظ الرد، لكن تعذّر إرساله الآن."
 	}
 	http.Redirect(w, r, "/admin/support?msg="+urlencode(msg), http.StatusSeeOther)
