@@ -33,7 +33,7 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 	}
 	_, _ = b.AnswerCallbackQuery(ctx, &tg.AnswerCallbackQueryParams{CallbackQueryID: cq.ID})
 	if !a.isSubscribed(ctx, cq.From.ID) {
-		a.send(ctx, cq.From.ID, gateScreen(a.settings))
+		a.send(ctx, cq.From.ID, gateScreen(a.settings.Get()))
 		return
 	}
 

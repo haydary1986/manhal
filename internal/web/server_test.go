@@ -25,6 +25,28 @@ func (f *fakeNotifier) Notify(userID int64, text string) error {
 	return nil
 }
 
+// fakeSettings is an in-memory Settings double for tests.
+type fakeSettings struct {
+	channel string
+	require bool
+}
+
+func (f *fakeSettings) RequiredChannel() string  { return f.channel }
+func (f *fakeSettings) RequireSubscription() bool { return f.require }
+func (f *fakeSettings) SetGate(channel string, require bool) error {
+	if require && channel == "" {
+		return errTestGate
+	}
+	f.channel, f.require = channel, require
+	return nil
+}
+
+var errTestGate = errorString("channel required when gate enabled")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
+
 func testServer(t *testing.T) *Server {
 	t.Helper()
 	mgr := menu.NewManager(t.TempDir(), []menu.Item{
@@ -33,7 +55,7 @@ func testServer(t *testing.T) *Server {
 			{ID: "search", Label: "🔍 بحث", Action: "search"},
 		}},
 	})
-	return NewServer(mgr, store.NewMemory(), &fakeNotifier{}, map[string]string{"admin": "secret"})
+	return NewServer(mgr, store.NewMemory(), &fakeNotifier{}, map[string]string{"admin": "secret"}, &fakeSettings{})
 }
 
 func TestHealthz_NoAuth(t *testing.T) {
@@ -93,7 +115,7 @@ func TestDashboard_RendersStats(t *testing.T) {
 	_ = st.RecordUsage(context.Background(), 7, "search")
 	_ = st.RecordUsage(context.Background(), 7, "search")
 	_ = st.RecordUsage(context.Background(), 7, "cite")
-	s := NewServer(mgr, st, nil, map[string]string{"admin": "secret"})
+	s := NewServer(mgr, st, nil, map[string]string{"admin": "secret"}, &fakeSettings{})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	req.SetBasicAuth("admin", "secret")
@@ -169,7 +191,7 @@ func TestDelete_RemovesButton(t *testing.T) {
 
 func TestAuth_MultipleAccounts(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
-	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"alice": "pw1", "bob": "pw2"})
+	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"alice": "pw1", "bob": "pw2"}, &fakeSettings{})
 
 	for _, c := range []struct {
 		user, pass string
@@ -194,7 +216,7 @@ func TestSupport_ListAndReplyPushes(t *testing.T) {
 	mgr := menu.NewManager(t.TempDir(), nil)
 	st := store.NewMemory()
 	notifier := &fakeNotifier{}
-	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"})
+	s := NewServer(mgr, st, notifier, map[string]string{"admin": "secret"}, &fakeSettings{})
 
 	_ = st.AddTicket(context.Background(), domain.Ticket{
 		ID: "t1", UserID: 555, UserName: "باحث", Message: "كيف أصدّر مكتبتي؟",
@@ -234,7 +256,7 @@ func TestSupport_ListAndReplyPushes(t *testing.T) {
 
 func TestSupportReply_NilNotifierStillSaves(t *testing.T) {
 	st := store.NewMemory()
-	s := NewServer(menu.NewManager(t.TempDir(), nil), st, nil, map[string]string{"admin": "secret"})
+	s := NewServer(menu.NewManager(t.TempDir(), nil), st, nil, map[string]string{"admin": "secret"}, &fakeSettings{})
 	_ = st.AddTicket(context.Background(), domain.Ticket{ID: "x", UserID: 1, Message: "q"})
 
 	form := url.Values{"id": {"x"}, "reply": {"ans"}}
@@ -247,6 +269,46 @@ func TestSupportReply_NilNotifierStillSaves(t *testing.T) {
 	tickets, _ := st.ListTickets(context.Background())
 	if tickets[0].Reply != "ans" {
 		t.Error("reply should be saved even without a notifier")
+	}
+}
+
+func TestSettings_SaveGate(t *testing.T) {
+	mgr := menu.NewManager(t.TempDir(), nil)
+	fs := &fakeSettings{}
+	s := NewServer(mgr, store.NewMemory(), nil, map[string]string{"admin": "secret"}, fs)
+
+	// Page renders.
+	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "الاشتراك الإجباري") {
+		t.Fatalf("settings page wrong: %d", rec.Code)
+	}
+
+	// Saving a channel persists through the Settings interface.
+	form := url.Values{"channel": {"@manhal_channel"}, "require": {"on"}}
+	req2 := httptest.NewRequest(http.MethodPost, "/admin/settings/gate", strings.NewReader(form.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.SetBasicAuth("admin", "secret")
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusSeeOther {
+		t.Fatalf("save status = %d, want 303", rec2.Code)
+	}
+	if fs.channel != "@manhal_channel" || !fs.require {
+		t.Errorf("gate not saved: %+v", fs)
+	}
+
+	// Enabling the gate without a channel is rejected (error redirect).
+	form2 := url.Values{"channel": {""}, "require": {"on"}}
+	req3 := httptest.NewRequest(http.MethodPost, "/admin/settings/gate", strings.NewReader(form2.Encode()))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req3.SetBasicAuth("admin", "secret")
+	rec3 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec3, req3)
+	if !strings.Contains(rec3.Header().Get("Location"), "err=") {
+		t.Errorf("expected error redirect, got %q", rec3.Header().Get("Location"))
 	}
 }
 

@@ -23,7 +23,7 @@ func (a *App) handleStart(ctx context.Context, _ *tg.Bot, update *models.Update)
 	}
 
 	if from != nil && !a.isSubscribed(ctx, from.ID) {
-		a.send(ctx, chatID, gateScreen(a.settings))
+		a.send(ctx, chatID, gateScreen(a.settings.Get()))
 		return
 	}
 	a.send(ctx, chatID, a.mainMenuScreen())
@@ -57,7 +57,7 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 
 	// Enforce the subscription gate on every action.
 	if !a.isSubscribed(ctx, cq.From.ID) {
-		a.send(ctx, cq.From.ID, gateScreen(a.settings))
+		a.send(ctx, cq.From.ID, gateScreen(a.settings.Get()))
 		return
 	}
 

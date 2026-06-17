@@ -12,7 +12,7 @@ import (
 // mainMenuScreen renders the root menu from the editable menu tree.
 func (a *App) mainMenuScreen() Screen {
 	return Screen{
-		Text:     a.settings.WelcomeMessage,
+		Text:     a.settings.Get().WelcomeMessage,
 		Keyboard: menuKeyboard(a.menuItems(menu.RootID), false),
 	}
 }
@@ -70,7 +70,7 @@ func (a *App) handleNav(ctx context.Context, b *tg.Bot, update *models.Update) {
 	}
 	_, _ = b.AnswerCallbackQuery(ctx, &tg.AnswerCallbackQueryParams{CallbackQueryID: cq.ID})
 	if !a.isSubscribed(ctx, cq.From.ID) {
-		a.send(ctx, cq.From.ID, gateScreen(a.settings))
+		a.send(ctx, cq.From.ID, gateScreen(a.settings.Get()))
 		return
 	}
 	a.sessions.clear(cq.From.ID)

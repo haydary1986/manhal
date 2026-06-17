@@ -36,6 +36,14 @@ type Notifier interface {
 	Notify(userID int64, text string) error
 }
 
+// Settings is the editable bot configuration the admin manages (the
+// subscription gate). Implemented by config.SettingsManager.
+type Settings interface {
+	RequiredChannel() string
+	RequireSubscription() bool
+	SetGate(channel string, require bool) error
+}
+
 // actionOptions are the leaf actions an admin can attach to a button, plus the
 // "submenu" container option. Keys match the bot's menu dispatch.
 var actionOptions = []struct{ Key, Label string }{
@@ -70,14 +78,15 @@ type Server struct {
 	menu     *menu.Manager
 	data     Data
 	notifier Notifier
+	settings Settings
 	accounts map[string]string // username -> password
 }
 
-// NewServer builds the admin server over the shared menu manager and data
-// store. notifier may be nil (replies are saved but not pushed until the bot is
-// up). accounts maps usernames to passwords for Basic Auth.
-func NewServer(mgr *menu.Manager, data Data, notifier Notifier, accounts map[string]string) *Server {
-	return &Server{menu: mgr, data: data, notifier: notifier, accounts: accounts}
+// NewServer builds the admin server over the shared menu manager, data store
+// and settings. notifier may be nil (replies are saved but not pushed until the
+// bot is up). accounts maps usernames to passwords for Basic Auth.
+func NewServer(mgr *menu.Manager, data Data, notifier Notifier, accounts map[string]string, settings Settings) *Server {
+	return &Server{menu: mgr, data: data, notifier: notifier, settings: settings, accounts: accounts}
 }
 
 // Handler returns the routed, auth-protected HTTP handler.
@@ -95,6 +104,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
+	mux.HandleFunc("/admin/settings", s.auth(s.handleSettings))
+	mux.HandleFunc("/admin/settings/gate", s.auth(s.handleSetGate))
 	return mux
 }
 
@@ -249,6 +260,34 @@ func (s *Server) handleSupportReply(w http.ResponseWriter, r *http.Request) {
 		msg = "تم حفظ الرد، لكن تعذّر إرساله الآن."
 	}
 	http.Redirect(w, r, "/admin/support?msg="+urlencode(msg), http.StatusSeeOther)
+}
+
+// handleSettings renders the bot-settings page (subscription gate).
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	s.renderSettings(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleSetGate saves the required-channel subscription gate.
+func (s *Server) handleSetGate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.settings == nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("الإعدادات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("نموذج غير صالح"), http.StatusSeeOther)
+		return
+	}
+	channel := strings.TrimSpace(r.FormValue("channel"))
+	require := r.FormValue("require") == "on"
+	if err := s.settings.SetGate(channel, require); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("لتفعيل الاشتراك الإجباري أدخِل معرّف القناة أولاً"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ إعدادات الاشتراك الإجباري"), http.StatusSeeOther)
 }
 
 func adminErr(err error) string {

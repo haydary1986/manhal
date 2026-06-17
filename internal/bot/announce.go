@@ -39,7 +39,7 @@ func (a *App) handleAnnouncements(ctx context.Context, b *tg.Bot, update *models
 	_, _ = b.AnswerCallbackQuery(ctx, &tg.AnswerCallbackQueryParams{CallbackQueryID: cq.ID})
 
 	if !a.isSubscribed(ctx, cq.From.ID) {
-		a.send(ctx, cq.From.ID, gateScreen(a.settings))
+		a.send(ctx, cq.From.ID, gateScreen(a.settings.Get()))
 		return
 	}
 

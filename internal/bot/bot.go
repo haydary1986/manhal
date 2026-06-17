@@ -23,7 +23,7 @@ import (
 // constructor readable as the adapter grows.
 type Deps struct {
 	Config      *config.Config
-	Settings    *config.BotSettings
+	Settings    *config.SettingsManager
 	Store       store.Store
 	AI          ai.Provider
 	Citations   CitationSource
@@ -45,7 +45,7 @@ type Deps struct {
 type App struct {
 	bot          *tg.Bot
 	cfg          *config.Config
-	settings     *config.BotSettings
+	settings     *config.SettingsManager
 	store        store.Store
 	ai           ai.Provider
 	cite         CitationSource
@@ -146,7 +146,7 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 	a.ensureUser(ctx, msg.From)
 
 	if !a.isSubscribed(ctx, msg.From.ID) {
-		a.send(ctx, msg.Chat.ID, gateScreen(a.settings))
+		a.send(ctx, msg.Chat.ID, gateScreen(a.settings.Get()))
 		return
 	}
 

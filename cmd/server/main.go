@@ -33,6 +33,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("settings: %v", err)
 	}
+	// Shared, persisted settings: the bot reads the gate live; the web edits it.
+	settingsMgr := config.NewSettingsManager(cfg.DataDir, settings)
 
 	disciplines, err := config.LoadDisciplines(cfg.DataDir)
 	if err != nil {
@@ -98,7 +100,7 @@ func main() {
 
 	app, err := bot.New(bot.Deps{
 		Config:      cfg,
-		Settings:    settings,
+		Settings:    settingsMgr,
 		Store:       st,
 		AI:          ai.NewDeepSeek(cfg.DeepSeekKey),
 		Citations:   scholar.NewCrossref(cfg.CrossrefMailto),
@@ -127,7 +129,7 @@ func main() {
 	// is never exposed without a password. It runs independently of the bot.
 	accounts := cfg.WebAccounts()
 	if len(accounts) > 0 {
-		webSrv := web.NewServer(menuMgr, st, notifier, accounts)
+		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr)
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

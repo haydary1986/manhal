@@ -9,7 +9,7 @@ import (
 )
 
 // gateScreen is shown when the user must join the required channel first.
-func gateScreen(bs *config.BotSettings) Screen {
+func gateScreen(bs config.BotSettings) Screen {
 	return Screen{
 		Text: "🔒 لتفعيل منهل، اشترك أولاً في القناة:\n" + bs.RequiredChannel +
 			"\n\nبعد الاشتراك اضغط «✅ تحقّقت».",
@@ -36,7 +36,7 @@ func channelURL(ch string) string {
 // isSubscribed reports whether the user is a member of the required channel.
 // When subscription is not required it always returns true.
 func (a *App) isSubscribed(ctx context.Context, userID int64) bool {
-	bs := a.settings
+	bs := a.settings.Get()
 	if !bs.RequireSubscription || bs.RequiredChannel == "" {
 		return true
 	}

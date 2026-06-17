@@ -19,7 +19,7 @@ func testMenuApp(t *testing.T) *App {
 	})
 	return &App{
 		cfg:      &config.Config{AdminIDs: []int64{99}},
-		settings: config.DefaultBotSettings(),
+		settings: config.NewSettingsManager(t.TempDir(), config.DefaultBotSettings()),
 		menu:     mgr,
 		sessions: newSessions(),
 	}
@@ -51,7 +51,7 @@ func TestMenuKeyboard_SubmenuVsAction(t *testing.T) {
 func TestMainMenuScreen_FromTree(t *testing.T) {
 	a := testMenuApp(t)
 	scr := a.mainMenuScreen()
-	if !strings.Contains(scr.Text, a.settings.WelcomeMessage) {
+	if !strings.Contains(scr.Text, a.settings.Get().WelcomeMessage) {
 		t.Error("main menu should show the welcome message")
 	}
 	// Submenu shows with a folder marker, action shows directly.

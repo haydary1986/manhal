@@ -265,6 +265,32 @@ func (s *Server) renderMenu(w http.ResponseWriter, ctx context.Context, msg, err
 	writeHTML(w, menuTemplate, vm)
 }
 
+// ---------- settings (subscription gate) ----------
+
+type settingsVM struct {
+	layout
+	Channel  string
+	Require  bool
+	Msg, Err string
+}
+
+// renderSettings renders the bot-settings page (the subscription gate).
+func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := settingsVM{Msg: msg, Err: errMsg}
+	if s.settings != nil {
+		vm.Channel = s.settings.RequiredChannel()
+		vm.Require = s.settings.RequireSubscription()
+	}
+	vm.layout = layout{
+		Title:     "منهل — الإعدادات",
+		Heading:   "⚙️ إعدادات البوت",
+		Sub:       "قناة الاشتراك الإجباري قبل استخدام البوت",
+		Active:    "settings",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, settingsTemplate, vm)
+}
+
 // ---------- support ----------
 
 type ticketVM struct {
@@ -496,6 +522,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
+      <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
     </nav>
     <div class="side-foot">منهل · مساعد الباحثين</div>
   </aside>
@@ -658,5 +685,32 @@ var supportTemplate = template.Must(template.New("support").Parse(layoutHead + `
   {{else}}
   <div class="empty">لا توجد طلبات دعم حتى الآن.</div>
   {{end}}
+</div>
+` + layoutFoot))
+
+var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="card" style="max-width:640px">
+  <h3>🔒 الاشتراك الإجباري بالقناة</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 14px;line-height:1.7">
+    عند التفعيل، على المستخدم الاشتراك بالقناة قبل استخدام البوت.
+    <br><b>مهم:</b> اجعل البوت <b>مشرفاً (Admin)</b> في القناة حتى يستطيع التحقّق من الاشتراك.
+  </p>
+  <form method="post" action="/admin/settings/gate">
+    <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:15px;color:#0f172a">
+      <input type="checkbox" name="require" style="width:auto" {{if .Require}}checked{{end}}>
+      <span>تفعيل الاشتراك الإجباري</span>
+    </label>
+    <label>معرّف القناة أو رابطها</label>
+    <input name="channel" value="{{.Channel}}" placeholder="@manhal_channel أو https://t.me/manhal_channel">
+    <button class="btn" type="submit">💾 حفظ الإعدادات</button>
+  </form>
+  <div style="margin-top:16px;font-size:13px;color:#64748b">
+    الحالة الحالية:
+    {{if .Require}}<span class="tag">مُفعّل ✅</span>{{else}}<span class="tag">مُعطّل</span>{{end}}
+    {{if .Channel}} · القناة: <b>{{.Channel}}</b>{{end}}
+  </div>
 </div>
 ` + layoutFoot))
