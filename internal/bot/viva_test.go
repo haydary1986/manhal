@@ -6,13 +6,13 @@ import (
 )
 
 func TestSupportedDocExt(t *testing.T) {
-	for _, name := range []string{"thesis.docx", "thesis.TEX", "notes.txt"} {
+	for _, name := range []string{"thesis.docx", "thesis.TEX", "notes.txt", "thesis.PDF"} {
 		if _, err := supportedDocExt(name); err != nil {
 			t.Errorf("%q should be supported: %v", name, err)
 		}
 	}
-	if _, err := supportedDocExt("thesis.pdf"); err == nil {
-		t.Error("pdf should be unsupported")
+	if _, err := supportedDocExt("thesis.rtf"); err == nil {
+		t.Error("rtf should be unsupported")
 	}
 }
 
@@ -21,8 +21,13 @@ func TestExtractDocText_Tex(t *testing.T) {
 	if err != nil || !strings.Contains(got, "Intro") {
 		t.Errorf("tex extraction = (%q, %v)", got, err)
 	}
-	if _, err := extractDocText("x.pdf", []byte("x")); err != errUnsupportedDoc {
-		t.Errorf("pdf err = %v, want errUnsupportedDoc", err)
+	// .pdf is now routed to the PDF extractor (not rejected as unsupported);
+	// invalid bytes fail in the extractor, not with errUnsupportedDoc.
+	if _, err := extractDocText("x.pdf", []byte("not a real pdf")); err == errUnsupportedDoc {
+		t.Error("pdf should be handled by the extractor, not rejected as unsupported")
+	}
+	if _, err := extractDocText("x.rtf", []byte("x")); err != errUnsupportedDoc {
+		t.Errorf("rtf err = %v, want errUnsupportedDoc", err)
 	}
 }
 

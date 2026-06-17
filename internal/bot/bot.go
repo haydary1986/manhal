@@ -200,7 +200,7 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		a.send(ctx, msg.Chat.ID, Screen{Text: "أرسل ملفاً ‎.tex‎ أو ‎.docx‎ (وليس نصاً).", Keyboard: latexNav()})
 		return
 	case stateAwaitVivaFile:
-		a.send(ctx, msg.Chat.ID, Screen{Text: "ارفع ملف الأطروحة ‎.docx‎ أو ‎.tex‎ (وليس نصاً).", Keyboard: vivaNav()})
+		a.send(ctx, msg.Chat.ID, Screen{Text: "ارفع ملف الأطروحة ‎.pdf‎ أو ‎.docx‎ أو ‎.tex‎ (وليس نصاً).", Keyboard: vivaNav()})
 		return
 	case stateAwaitPdfFile:
 		a.send(ctx, msg.Chat.ID, Screen{Text: "ارفع ملف ‎.pdf‎ (وليس نصاً).", Keyboard: pdfNav()})
