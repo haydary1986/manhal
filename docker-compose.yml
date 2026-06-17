@@ -73,8 +73,10 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
-    ports:
-      - "8080:8080" # لوحة الأدمن — في Coolify اربط نطاقاً بدل تعريض المنفذ
+    # لا نحجز منفذاً على الخادم (يتعارض مع Coolify). البوت يعمل بـ long-polling،
+    # ولوحة الأدمن تُفتَح عبر نطاق Coolify الذي يوجّه داخليّاً إلى المنفذ 8080.
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
       interval: 15s
