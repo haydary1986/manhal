@@ -48,10 +48,26 @@ services:
 
   bot:
     build: .
-    env_file: .env
+    # المتغيّرات تُقرأ من خزنة Coolify (Environment Variables) — أو محليّاً من ./.env
+    # عبر استبدال ${...}. لا نستخدم env_file كي لا يفشل النشر حين غياب .env على الخادم.
     environment:
+      # خدمات داخلية — تُضبَط تلقائياً، لا تضعها في الخزنة:
       DATABASE_URL: postgres://manhal:${POSTGRES_PASSWORD:-changeme}@postgres:5432/manhal?sslmode=disable
       OLLAMA_URL: http://ollama:11434
+      # أسرار/إعدادات — املأها في Coolify (أو ./.env محليّاً):
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      ADMIN_IDS: ${ADMIN_IDS:-}
+      ADMIN_WEB_TOKEN: ${ADMIN_WEB_TOKEN:-}
+      ADMIN_WEB_USERS: ${ADMIN_WEB_USERS:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
+      UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL:-}
+      CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
+      AI_DAILY_LIMIT: ${AI_DAILY_LIMIT:-}
+      ALERT_INTERVAL_MINUTES: ${ALERT_INTERVAL_MINUTES:-}
+      REMINDER_WINDOW_DAYS: ${REMINDER_WINDOW_DAYS:-}
+      DIGEST_WEEKDAY: ${DIGEST_WEEKDAY:-}
+      WEB_ADDR: ${WEB_ADDR:-:8080}
     depends_on:
       postgres:
         condition: service_healthy
