@@ -16,6 +16,13 @@ type BotSettings struct {
 	RequireSubscription bool   `yaml:"require_subscription"`
 	RequiredChannel     string `yaml:"required_channel"`
 	WelcomeMessage      string `yaml:"welcome_message"`
+	// Premium / manual payment (no gateway): the admin describes the plans and
+	// the account numbers users transfer to; the bot shows them on the subscribe
+	// screen, and the admin confirms payment manually. PaymentLink is an optional
+	// deep link / payment URL (e.g. ZainCash) opened by a "pay now" button.
+	PremiumInfo    string `yaml:"premium_info"`
+	PaymentDetails string `yaml:"payment_details"`
+	PaymentLink    string `yaml:"payment_link"`
 }
 
 // DefaultBotSettings is the seed used when no file is present.
@@ -107,6 +114,31 @@ func (m *SettingsManager) RequiredChannel() string { return m.Get().RequiredChan
 
 // RequireSubscription reports whether the gate is enabled (nil-safe).
 func (m *SettingsManager) RequireSubscription() bool { return m.Get().RequireSubscription }
+
+// PremiumInfo returns the plans/benefits text shown on the subscribe screen.
+func (m *SettingsManager) PremiumInfo() string { return m.Get().PremiumInfo }
+
+// PaymentDetails returns the account numbers / payment instructions.
+func (m *SettingsManager) PaymentDetails() string { return m.Get().PaymentDetails }
+
+// PaymentLink returns the optional deep link / payment URL ("" if unset).
+func (m *SettingsManager) PaymentLink() string { return m.Get().PaymentLink }
+
+// SetPayment updates the premium description, payment details and optional pay
+// link, then persists.
+func (m *SettingsManager) SetPayment(premiumInfo, paymentDetails, paymentLink string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.cur
+	next.PremiumInfo = strings.TrimSpace(premiumInfo)
+	next.PaymentDetails = strings.TrimSpace(paymentDetails)
+	next.PaymentLink = strings.TrimSpace(paymentLink)
+	if err := SaveBotSettings(m.dataDir, &next); err != nil {
+		return err
+	}
+	m.cur = next
+	return nil
+}
 
 // SetGate updates the subscription gate (channel + on/off) and persists it.
 func (m *SettingsManager) SetGate(channel string, require bool) error {

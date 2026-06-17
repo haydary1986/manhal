@@ -45,6 +45,10 @@ type Settings interface {
 	RequiredChannel() string
 	RequireSubscription() bool
 	SetGate(channel string, require bool) error
+	PremiumInfo() string
+	PaymentDetails() string
+	PaymentLink() string
+	SetPayment(premiumInfo, paymentDetails, paymentLink string) error
 }
 
 // actionOptions are the leaf actions an admin can attach to a button, plus the
@@ -52,6 +56,7 @@ type Settings interface {
 var actionOptions = []struct{ Key, Label string }{
 	{"submenu", "📁 قائمة فرعية"},
 	{"url", "🔗 رابط خارجي"},
+	{"subscribe", "💎 الاشتراك / الترقية"},
 	{"announcements", "📢 الإعلانات"},
 	{"follow", "🔔 متابعاتي"},
 	{"search", "🔍 بحث عن ورقة"},
@@ -113,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
 	mux.HandleFunc("/admin/settings", s.auth(s.handleSettings))
 	mux.HandleFunc("/admin/settings/gate", s.auth(s.handleSetGate))
+	mux.HandleFunc("/admin/settings/payment", s.auth(s.handleSetPayment))
 	return mux
 }
 
@@ -376,6 +382,34 @@ func (s *Server) handleSetGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ إعدادات الاشتراك الإجباري"), http.StatusSeeOther)
+}
+
+// handleSetPayment saves the premium plans + manual payment details.
+func (s *Server) handleSetPayment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.settings == nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("الإعدادات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("نموذج غير صالح"), http.StatusSeeOther)
+		return
+	}
+	info := strings.TrimSpace(r.FormValue("premium_info"))
+	details := strings.TrimSpace(r.FormValue("payment_details"))
+	link := normalizeLink(r.FormValue("payment_link"))
+	if link != "" && !validLink(link) {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("رابط الدفع غير صالح"), http.StatusSeeOther)
+		return
+	}
+	if err := s.settings.SetPayment(info, details, link); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("تعذّر حفظ إعدادات الدفع"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ إعدادات الاشتراك والدفع"), http.StatusSeeOther)
 }
 
 func adminErr(err error) string {

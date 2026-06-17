@@ -98,6 +98,7 @@ func New(d Deps) (*App, error) {
 	b.RegisterHandler(tg.HandlerTypeMessageText, "/start", tg.MatchTypeExact, a.handleStart)
 	b.RegisterHandler(tg.HandlerTypeMessageText, "/admin", tg.MatchTypeExact, a.handleAdminCommand)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "gate:check", tg.MatchTypeExact, a.handleGateCheck)
+	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "premium:request", tg.MatchTypeExact, a.handlePremiumRequest)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "menu:", tg.MatchTypePrefix, a.handleMenu)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "nav:", tg.MatchTypePrefix, a.handleNav)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "admin:", tg.MatchTypePrefix, a.handleAdmin)

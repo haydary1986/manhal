@@ -359,17 +359,23 @@ func (s *Server) renderUsers(w http.ResponseWriter, ctx context.Context, msg, er
 
 type settingsVM struct {
 	layout
-	Channel  string
-	Require  bool
-	Msg, Err string
+	Channel        string
+	Require        bool
+	PremiumInfo    string
+	PaymentDetails string
+	PaymentLink    string
+	Msg, Err       string
 }
 
-// renderSettings renders the bot-settings page (the subscription gate).
+// renderSettings renders the bot-settings page (gate + premium/payment).
 func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
 	vm := settingsVM{Msg: msg, Err: errMsg}
 	if s.settings != nil {
 		vm.Channel = s.settings.RequiredChannel()
 		vm.Require = s.settings.RequireSubscription()
+		vm.PremiumInfo = s.settings.PremiumInfo()
+		vm.PaymentDetails = s.settings.PaymentDetails()
+		vm.PaymentLink = s.settings.PaymentLink()
 	}
 	vm.layout = layout{
 		Title:     "منهل — الإعدادات",
@@ -893,5 +899,22 @@ var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead +
     {{if .Require}}<span class="tag">مُفعّل ✅</span>{{else}}<span class="tag">مُعطّل</span>{{end}}
     {{if .Channel}} · القناة: <b>{{.Channel}}</b>{{end}}
   </div>
+</div>
+
+<div class="card" style="max-width:640px">
+  <h3>💎 الاشتراك المميّز والدفع</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 14px;line-height:1.7">
+    يظهر هذا للمستخدم في شاشة «الاشتراك» داخل البوت. اشرح الباقات والأسعار،
+    وأدخل أرقام الحسابات للدفع المباشر، ورابط دفع اختياري يفتح التطبيق.
+  </p>
+  <form method="post" action="/admin/settings/payment">
+    <label>وصف الباقات والأسعار</label>
+    <textarea name="premium_info" rows="4" placeholder="مثال:&#10;• الباقة الشهرية: 5,000 د.ع — حدود أعلى وكل الأدوات.&#10;• الباقة الفصلية: 12,000 د.ع.">{{.PremiumInfo}}</textarea>
+    <label>أرقام الحسابات / تعليمات الدفع</label>
+    <textarea name="payment_details" rows="3" placeholder="مثال:&#10;زين كاش: 0770xxxxxxx&#10;الاسم: ...">{{.PaymentDetails}}</textarea>
+    <label>رابط دفع مباشر (اختياري — يفتح التطبيق)</label>
+    <input name="payment_link" value="{{.PaymentLink}}" placeholder="https://zaincash.iq/... أو رابط محفظة">
+    <button class="btn" type="submit">💾 حفظ إعدادات الدفع</button>
+  </form>
 </div>
 ` + layoutFoot))

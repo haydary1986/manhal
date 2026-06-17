@@ -28,8 +28,11 @@ func (f *fakeNotifier) Notify(userID int64, text string) error {
 
 // fakeSettings is an in-memory Settings double for tests.
 type fakeSettings struct {
-	channel string
-	require bool
+	channel        string
+	require        bool
+	premiumInfo    string
+	paymentDetails string
+	paymentLink    string
 }
 
 func (f *fakeSettings) RequiredChannel() string   { return f.channel }
@@ -39,6 +42,13 @@ func (f *fakeSettings) SetGate(channel string, require bool) error {
 		return errTestGate
 	}
 	f.channel, f.require = channel, require
+	return nil
+}
+func (f *fakeSettings) PremiumInfo() string    { return f.premiumInfo }
+func (f *fakeSettings) PaymentDetails() string { return f.paymentDetails }
+func (f *fakeSettings) PaymentLink() string    { return f.paymentLink }
+func (f *fakeSettings) SetPayment(premiumInfo, paymentDetails, paymentLink string) error {
+	f.premiumInfo, f.paymentDetails, f.paymentLink = premiumInfo, paymentDetails, paymentLink
 	return nil
 }
 
