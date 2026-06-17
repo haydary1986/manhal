@@ -62,12 +62,20 @@ func (a *App) handleSlidesDoc(ctx context.Context, msg *models.Message) {
 	}
 	var text string
 	if strings.HasSuffix(name, ".pdf") {
-		text, _ = pdf.ExtractText(data)
+		text, err = pdf.ExtractText(data)
 	} else {
-		text, _ = docx.ExtractText(data)
+		text, err = docx.ExtractText(data)
+	}
+	if err != nil {
+		a.logf("slides extract (%s): %v", doc.FileName, err)
 	}
 	if strings.TrimSpace(text) == "" {
-		a.send(ctx, chatID, Screen{Text: "❌ تعذّر استخراج نص من الملف.", Keyboard: slidesNav()})
+		a.send(ctx, chatID, Screen{
+			Text: "❌ تعذّر استخراج نص من الملف.\n" +
+				"تأكّد أنه ملف Word حديث بصيغة ‎.docx‎ (وليس ‎.doc‎ القديم أو ملفاً ممسوحاً ضوئياً). " +
+				"في Word: «حفظ باسم» ← Word Document (‎.docx‎). أو أرسل النص مباشرةً.",
+			Keyboard: slidesNav(),
+		})
 		return
 	}
 	text, _ = truncateRunes(text, slidesMaxRunes)
