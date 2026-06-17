@@ -64,7 +64,12 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 	// Any menu navigation cancels an in-progress wizard.
 	a.sessions.clear(cq.From.ID)
 
-	switch strings.TrimPrefix(cq.Data, "menu:") {
+	action := strings.TrimPrefix(cq.Data, "menu:")
+	if action != "home" {
+		a.recordUsage(ctx, cq.From.ID, action) // analytics; best-effort
+	}
+
+	switch action {
 	case "home":
 		a.send(ctx, cq.From.ID, a.mainMenuScreen())
 	case "announcements":

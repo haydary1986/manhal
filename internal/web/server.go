@@ -15,10 +15,20 @@ import (
 	"github.com/erticaz/manhal/internal/menu"
 )
 
-// Tickets is the persistence the support panel needs.
-type Tickets interface {
+// Data is the persistence the admin panel reads from: support tickets plus the
+// aggregates powering the analytics dashboard.
+type Data interface {
 	ListTickets(ctx context.Context) ([]domain.Ticket, error)
 	AnswerTicket(ctx context.Context, id, reply string) (domain.Ticket, error)
+	ListUsers(ctx context.Context) ([]domain.User, error)
+	ListLibrary(ctx context.Context, userID int64) ([]domain.LibraryItem, error)
+	ListAllSubscriptions(ctx context.Context) ([]domain.Subscription, error)
+	ListAllCitationWatches(ctx context.Context) ([]domain.CitationWatch, error)
+	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
+	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
+	UsageTotals(ctx context.Context) (actions int, activeUsers int, err error)
+	UsageByWeekday(ctx context.Context) ([7]int, error)
+	UsageByHour(ctx context.Context) ([24]int, error)
 }
 
 // Notifier pushes an admin reply back to a user (implemented by the bot).
@@ -58,16 +68,16 @@ var actionOptions = []struct{ Key, Label string }{
 // Server is the admin web adapter.
 type Server struct {
 	menu     *menu.Manager
-	tickets  Tickets
+	data     Data
 	notifier Notifier
 	accounts map[string]string // username -> password
 }
 
-// NewServer builds the admin server over the shared menu manager and ticket
+// NewServer builds the admin server over the shared menu manager and data
 // store. notifier may be nil (replies are saved but not pushed until the bot is
 // up). accounts maps usernames to passwords for Basic Auth.
-func NewServer(mgr *menu.Manager, tickets Tickets, notifier Notifier, accounts map[string]string) *Server {
-	return &Server{menu: mgr, tickets: tickets, notifier: notifier, accounts: accounts}
+func NewServer(mgr *menu.Manager, data Data, notifier Notifier, accounts map[string]string) *Server {
+	return &Server{menu: mgr, data: data, notifier: notifier, accounts: accounts}
 }
 
 // Handler returns the routed, auth-protected HTTP handler.
@@ -79,7 +89,8 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/", s.auth(s.handleIndex))
-	mux.HandleFunc("/admin", s.auth(s.handleAdmin))
+	mux.HandleFunc("/admin", s.auth(s.handleDashboard))
+	mux.HandleFunc("/admin/menu", s.auth(s.handleMenuPage))
 	mux.HandleFunc("/admin/menu/add", s.auth(s.handleAdd))
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
@@ -136,8 +147,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 
-func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+// handleDashboard renders the analytics overview (the admin home).
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	s.renderDashboard(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleMenuPage renders the button-management page.
+func (s *Server) handleMenuPage(w http.ResponseWriter, r *http.Request) {
+	s.renderMenu(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
 }
 
 func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +185,7 @@ func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 		redirectErr(w, r, adminErr(err))
 		return
 	}
-	http.Redirect(w, r, "/admin?msg="+urlencode("تمت إضافة «"+label+"»"), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/menu?msg="+urlencode("تمت إضافة «"+label+"»"), http.StatusSeeOther)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -185,16 +202,16 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		redirectErr(w, r, adminErr(err))
 		return
 	}
-	http.Redirect(w, r, "/admin?msg="+urlencode("تم حذف الزر"), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/menu?msg="+urlencode("تم حذف الزر"), http.StatusSeeOther)
 }
 
 func redirectErr(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/admin?err="+urlencode(msg), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/menu?err="+urlencode(msg), http.StatusSeeOther)
 }
 
 // handleSupport lists support tickets.
 func (s *Server) handleSupport(w http.ResponseWriter, r *http.Request) {
-	tickets, err := s.tickets.ListTickets(r.Context())
+	tickets, err := s.data.ListTickets(r.Context())
 	if err != nil {
 		http.Error(w, "خطأ بقراءة الطلبات", http.StatusInternalServerError)
 		return
@@ -219,7 +236,7 @@ func (s *Server) handleSupportReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ticket, err := s.tickets.AnswerTicket(r.Context(), id, reply)
+	ticket, err := s.data.AnswerTicket(r.Context(), id, reply)
 	if err != nil {
 		http.Redirect(w, r, "/admin/support?err="+urlencode("الطلب غير موجود"), http.StatusSeeOther)
 		return

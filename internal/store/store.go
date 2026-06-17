@@ -51,6 +51,22 @@ type Store interface {
 	// UpdateSubscriptionSeen replaces the dedup memory of a subscription.
 	UpdateSubscriptionSeen(ctx context.Context, id string, seen []string) error
 
+	// RecordUsage increments the usage counter for (user, action). Best-effort
+	// analytics: callers ignore the error so tracking never breaks a feature.
+	RecordUsage(ctx context.Context, userID int64, action string) error
+	// FeatureUsage returns per-action totals, most-used first.
+	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
+	// TopUsers returns the most active users by total actions, capped at limit.
+	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
+	// UsageTotals returns the total recorded actions and the number of distinct
+	// users who have used at least one feature.
+	UsageTotals(ctx context.Context) (actions int, activeUsers int, err error)
+	// UsageByWeekday returns action counts per weekday in Baghdad time, indexed
+	// by Go's time.Weekday (Sunday=0 .. Saturday=6).
+	UsageByWeekday(ctx context.Context) ([7]int, error)
+	// UsageByHour returns action counts per hour-of-day (0..23) in Baghdad time.
+	UsageByHour(ctx context.Context) ([24]int, error)
+
 	// AddCitationWatch stores a citation watch for a user.
 	AddCitationWatch(ctx context.Context, w domain.CitationWatch) error
 	// ListCitationWatches returns a user's citation watches, newest first.

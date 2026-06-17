@@ -67,8 +67,34 @@ func TestAdmin_RejectsWrongPassword(t *testing.T) {
 	}
 }
 
-func TestAdmin_RendersTree(t *testing.T) {
+func TestMenuPage_RendersTree(t *testing.T) {
 	s := testServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/admin/menu", nil)
+	req.SetBasicAuth("admin", "secret")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"المراجع", "🔍 بحث", "search", "إضافة زر"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+}
+
+func TestDashboard_RendersStats(t *testing.T) {
+	mgr := menu.NewManager(t.TempDir(), nil)
+	st := store.NewMemory()
+	// Seed a user and some usage so the analytics cards have data.
+	_ = st.SaveUser(context.Background(), &domain.User{TelegramID: 7, Name: "باحث"})
+	_ = st.RecordUsage(context.Background(), 7, "search")
+	_ = st.RecordUsage(context.Background(), 7, "search")
+	_ = st.RecordUsage(context.Background(), 7, "cite")
+	s := NewServer(mgr, st, nil, map[string]string{"admin": "secret"})
+
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	req.SetBasicAuth("admin", "secret")
 	rec := httptest.NewRecorder()
@@ -78,9 +104,9 @@ func TestAdmin_RendersTree(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"المراجع", "🔍 بحث", "[search]", "إضافة زر"} {
+	for _, want := range []string{"لوحة التحكم", "أكثر الميزات استخداماً", "أنشط المستخدمين", "توقيت بغداد"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("page missing %q", want)
+			t.Errorf("dashboard missing %q", want)
 		}
 	}
 }

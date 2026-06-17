@@ -62,7 +62,16 @@ CREATE TABLE IF NOT EXISTS citation_watches (
   last_cited_by INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS citation_watches_user_idx ON citation_watches (user_id);`
+CREATE INDEX IF NOT EXISTS citation_watches_user_idx ON citation_watches (user_id);
+CREATE TABLE IF NOT EXISTS usage_events (
+  id      BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  action  TEXT NOT NULL,
+  at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS usage_events_action_idx ON usage_events (action);
+CREATE INDEX IF NOT EXISTS usage_events_user_idx ON usage_events (user_id);
+CREATE INDEX IF NOT EXISTS usage_events_at_idx ON usage_events (at);`
 
 // Postgres is a Store backed by PostgreSQL (pgx/v5).
 type Postgres struct {
@@ -84,6 +93,109 @@ func NewPostgres(ctx context.Context, dsn string) (*Postgres, error) {
 		return nil, fmt.Errorf("postgres schema: %w", err)
 	}
 	return &Postgres{pool: pool}, nil
+}
+
+// RecordUsage stores a timestamped feature-invocation event.
+func (p *Postgres) RecordUsage(ctx context.Context, userID int64, action string) error {
+	const q = `INSERT INTO usage_events (user_id, action) VALUES ($1, $2)`
+	_, err := p.pool.Exec(ctx, q, userID, action)
+	return err
+}
+
+// FeatureUsage aggregates counts per action, most-used first.
+func (p *Postgres) FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error) {
+	const q = `SELECT action, COUNT(*)::int AS c
+	           FROM usage_events GROUP BY action ORDER BY c DESC, action ASC`
+	rows, err := p.pool.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.FeatureCount
+	for rows.Next() {
+		var fc domain.FeatureCount
+		if err := rows.Scan(&fc.Action, &fc.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, fc)
+	}
+	return out, rows.Err()
+}
+
+// TopUsers returns the most active users by total actions, capped at limit.
+func (p *Postgres) TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error) {
+	const q = `SELECT ue.user_id, COALESCE(u.name, ''), COUNT(*)::int AS c
+	           FROM usage_events ue
+	           LEFT JOIN users u ON u.telegram_id = ue.user_id
+	           GROUP BY ue.user_id, u.name
+	           ORDER BY c DESC, ue.user_id ASC
+	           LIMIT $1`
+	rows, err := p.pool.Query(ctx, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.UserUsage
+	for rows.Next() {
+		var uu domain.UserUsage
+		if err := rows.Scan(&uu.UserID, &uu.Name, &uu.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, uu)
+	}
+	return out, rows.Err()
+}
+
+// UsageTotals returns total recorded actions and distinct active users.
+func (p *Postgres) UsageTotals(ctx context.Context) (int, int, error) {
+	const q = `SELECT COUNT(*)::int, COUNT(DISTINCT user_id)::int FROM usage_events`
+	var actions, active int
+	err := p.pool.QueryRow(ctx, q).Scan(&actions, &active)
+	return actions, active, err
+}
+
+// UsageByWeekday buckets events by weekday in Baghdad time (Sunday=0..Saturday=6).
+func (p *Postgres) UsageByWeekday(ctx context.Context) ([7]int, error) {
+	var out [7]int
+	const q = `SELECT EXTRACT(DOW FROM at AT TIME ZONE 'Asia/Baghdad')::int AS d, COUNT(*)::int
+	           FROM usage_events GROUP BY d`
+	rows, err := p.pool.Query(ctx, q)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d, n int
+		if err := rows.Scan(&d, &n); err != nil {
+			return out, err
+		}
+		if d >= 0 && d < 7 {
+			out[d] = n
+		}
+	}
+	return out, rows.Err()
+}
+
+// UsageByHour buckets events by hour-of-day (0..23) in Baghdad time.
+func (p *Postgres) UsageByHour(ctx context.Context) ([24]int, error) {
+	var out [24]int
+	const q = `SELECT EXTRACT(HOUR FROM at AT TIME ZONE 'Asia/Baghdad')::int AS h, COUNT(*)::int
+	           FROM usage_events GROUP BY h`
+	rows, err := p.pool.Query(ctx, q)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var h, n int
+		if err := rows.Scan(&h, &n); err != nil {
+			return out, err
+		}
+		if h >= 0 && h < 24 {
+			out[h] = n
+		}
+	}
+	return out, rows.Err()
 }
 
 // Close releases the connection pool.
