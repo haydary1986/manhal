@@ -31,6 +31,7 @@ const (
 	stateAwaitGiftCode    sessionState = "await_gift_code"
 	stateAwaitHumanize    sessionState = "await_humanize"
 	stateAwaitPdf2Word    sessionState = "await_pdf2word"
+	stateAwaitSlides      sessionState = "await_slides"
 	stateAwaitSimilarDOI  sessionState = "await_similar_doi"
 	stateAwaitRetractDOI  sessionState = "await_retract_doi"
 	stateAwaitFollowTopic sessionState = "await_follow_topic"

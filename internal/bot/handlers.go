@@ -149,6 +149,9 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 	case "pdf2word":
 		a.sessions.set(cq.From.ID, stateAwaitPdf2Word)
 		a.send(ctx, cq.From.ID, pdf2wordPromptScreen())
+	case "slides":
+		a.sessions.set(cq.From.ID, stateAwaitSlides)
+		a.send(ctx, cq.From.ID, slidesPromptScreen())
 	case "similar":
 		a.sessions.set(cq.From.ID, stateAwaitSimilarDOI)
 		a.send(ctx, cq.From.ID, similarPromptScreen())

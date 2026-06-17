@@ -120,6 +120,7 @@ var actionOptions = []struct{ Key, Label string }{
 	{"ai", "🤖 المساعد الذكي"},
 	{"humanize", "✍️ إعادة كتابة بشرية"},
 	{"pdf2word", "📄➡️ PDF إلى Word"},
+	{"slides", "🎬 إنشاء عرض تقديمي"},
 	{"similar", "🔗 أوراق مشابهة"},
 	{"retracted", "🚫 كشف الأوراق المسحوبة"},
 	{"library", "⭐ مكتبتي"},

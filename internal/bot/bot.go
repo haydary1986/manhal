@@ -199,6 +199,8 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 			a.handleHumanizeDoc(ctx, msg)
 		case stateAwaitPdf2Word:
 			a.handlePdf2Word(ctx, msg)
+		case stateAwaitSlides:
+			a.handleSlidesDoc(ctx, msg)
 		default:
 			a.send(ctx, msg.Chat.ID, a.mainMenuScreen())
 		}
@@ -266,6 +268,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	case stateAwaitHumanize:
 		a.handleHumanizeText(ctx, msg)
+		return
+	case stateAwaitSlides:
+		a.handleSlidesText(ctx, msg)
 		return
 	case stateAwaitSimilarDOI:
 		a.handleSimilarDOI(ctx, msg)
