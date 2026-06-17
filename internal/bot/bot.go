@@ -189,6 +189,8 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 			a.handleVivaDocument(ctx, msg)
 		case stateAwaitPdfFile:
 			a.handlePdfUpload(ctx, msg) // keeps the session (enters chat mode)
+		case stateAwaitHumanize:
+			a.handleHumanizeDoc(ctx, msg)
 		default:
 			a.send(ctx, msg.Chat.ID, a.mainMenuScreen())
 		}
@@ -253,6 +255,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	case stateAwaitGiftCode:
 		a.handleGiftCode(ctx, msg)
+		return
+	case stateAwaitHumanize:
+		a.handleHumanizeText(ctx, msg)
 		return
 	case stateAwaitFollowTopic:
 		a.sessions.clear(msg.From.ID)

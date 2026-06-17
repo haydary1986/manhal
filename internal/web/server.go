@@ -117,6 +117,7 @@ var actionOptions = []struct{ Key, Label string }{
 	{"viva", "🎤 تحضير المناقشة"},
 	{"pdfchat", "📄 محادثة الـ PDF"},
 	{"ai", "🤖 المساعد الذكي"},
+	{"humanize", "✍️ إعادة كتابة بشرية"},
 	{"library", "⭐ مكتبتي"},
 	{"semantic", "🧠 بحث دلالي بمكتبتي"},
 	{"support", "📞 الدعم الفني"},
