@@ -11,8 +11,12 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=build /out/manhal /app/manhal
-COPY data /app/data
+# Seed data lives in /app/seed; /app/data is a writable volume seeded on first
+# run by the entrypoint, so admin edits persist across redeploys.
+COPY data /app/seed
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 ENV DATA_DIR=/app/data
 # Admin web server (enabled only when ADMIN_WEB_TOKEN is set).
 EXPOSE 8080
-ENTRYPOINT ["/app/manhal"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

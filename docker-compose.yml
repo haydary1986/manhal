@@ -73,6 +73,10 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+    # تعديلات الأدمن (الأزرار، الإعدادات، المفتاح، الإعلانات) تُحفظ في /app/data
+    # على volume دائم فتبقى عبر كل إعادة نشر.
+    volumes:
+      - appdata:/app/data
     # لا نحجز منفذاً على الخادم (يتعارض مع Coolify). البوت يعمل بـ long-polling،
     # ولوحة الأدمن تُفتَح عبر نطاق Coolify الذي يوجّه داخليّاً إلى المنفذ 8080.
     expose:
@@ -116,3 +120,4 @@ volumes:
   pgdata:     # بيانات Postgres — منفصلة عن صورة التطبيق، تبقى عبر كل تحديث
   ollama:     # نماذج التضمين المحمّلة
   pgbackups:  # نسخ pg_dump الاحتياطية (منفصلة عن pgdata)
+  appdata:    # تعديلات الأدمن (menu.yaml, bot.yaml, announcements.yaml)
