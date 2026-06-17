@@ -191,6 +191,8 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 			a.handlePdfUpload(ctx, msg) // keeps the session (enters chat mode)
 		case stateAwaitHumanize:
 			a.handleHumanizeDoc(ctx, msg)
+		case stateAwaitPdf2Word:
+			a.handlePdf2Word(ctx, msg)
 		default:
 			a.send(ctx, msg.Chat.ID, a.mainMenuScreen())
 		}

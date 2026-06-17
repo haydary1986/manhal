@@ -8,7 +8,9 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/manhal ./cmd/server
 
 # ---- run ----
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
+# ca-certificates/tzdata for TLS + Baghdad time; poppler-utils + tesseract (with
+# Arabic & English data) power OCR of scanned PDFs in the PDF→Word converter.
+RUN apk add --no-cache ca-certificates tzdata poppler-utils tesseract-ocr tesseract-ocr-data-ara tesseract-ocr-data-eng
 WORKDIR /app
 COPY --from=build /out/manhal /app/manhal
 # Seed data lives in /app/seed; /app/data is a writable volume seeded on first

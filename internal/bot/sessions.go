@@ -30,6 +30,7 @@ const (
 	stateAwaitSupport     sessionState = "await_support"
 	stateAwaitGiftCode    sessionState = "await_gift_code"
 	stateAwaitHumanize    sessionState = "await_humanize"
+	stateAwaitPdf2Word    sessionState = "await_pdf2word"
 	stateAwaitFollowTopic sessionState = "await_follow_topic"
 	stateAwaitTrend       sessionState = "await_trend"
 	stateAwaitGap         sessionState = "await_gap"

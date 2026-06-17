@@ -146,6 +146,9 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 	case "humanize":
 		a.sessions.set(cq.From.ID, stateAwaitHumanize)
 		a.send(ctx, cq.From.ID, humanizePromptScreen(a.isPremiumUser(ctx, cq.From.ID)))
+	case "pdf2word":
+		a.sessions.set(cq.From.ID, stateAwaitPdf2Word)
+		a.send(ctx, cq.From.ID, pdf2wordPromptScreen())
 	case "subscribe":
 		a.send(ctx, cq.From.ID, subscribeScreen(a.settings.Get()))
 	case "support":

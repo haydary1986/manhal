@@ -118,6 +118,7 @@ var actionOptions = []struct{ Key, Label string }{
 	{"pdfchat", "📄 محادثة الـ PDF"},
 	{"ai", "🤖 المساعد الذكي"},
 	{"humanize", "✍️ إعادة كتابة بشرية"},
+	{"pdf2word", "📄➡️ PDF إلى Word"},
 	{"library", "⭐ مكتبتي"},
 	{"semantic", "🧠 بحث دلالي بمكتبتي"},
 	{"support", "📞 الدعم الفني"},
