@@ -1,8 +1,8 @@
 # منهل — تشغيل كامل: البوت + Postgres (تخزين دائم) + Ollama (embeddings محلية).
 # الاستخدام:
-#   1) cp .env.example .env  ثم املأ الأسرار (BOT_TOKEN, DEEPSEEK_API_KEY, ADMIN_WEB_TOKEN, EMBED_MODEL=bge-m3 ...)
+#   1) cp .env.example .env  ثم املأ الأسرار (BOT_TOKEN, DEEPSEEK_API_KEY, ADMIN_WEB_TOKEN, EMBED_MODEL=nomic-embed-text ...)
 #   2) docker compose up -d --build
-#   3) docker compose exec ollama ollama pull bge-m3   # تنزيل نموذج التضمين مرة واحدة
+#   3) docker compose exec ollama ollama pull nomic-embed-text   # تنزيل نموذج التضمين مرة واحدة
 #
 # ملاحظة: DATABASE_URL و OLLAMA_URL تُضبَطان هنا تلقائياً للخدمات الداخلية —
 #         لا تضعهما في .env (ستُتجاهَل قيمتهما لصالح ما أدناه).
@@ -43,7 +43,7 @@ services:
         condition: service_started
     environment:
       OLLAMA_HOST: ollama:11434
-    entrypoint: ["/bin/sh", "-c", "sleep 4; ollama pull ${EMBED_MODEL:-bge-m3}"]
+    entrypoint: ["/bin/sh", "-c", "sleep 4; ollama pull ${EMBED_MODEL:-nomic-embed-text}"]
     restart: "no"
 
   bot:
@@ -60,7 +60,7 @@ services:
       ADMIN_WEB_TOKEN: ${ADMIN_WEB_TOKEN:-}
       ADMIN_WEB_USERS: ${ADMIN_WEB_USERS:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
+      EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
       UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL:-}
       CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
       AI_DAILY_LIMIT: ${AI_DAILY_LIMIT:-}

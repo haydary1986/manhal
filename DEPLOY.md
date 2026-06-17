@@ -11,7 +11,7 @@ Compose، و(اختياري) نطاق + HTTPS للوحة الأدمن.
 | `ADMIN_IDS` | نعم (لـ `/admin` بالبوت) | @userinfobot |
 | `ADMIN_WEB_TOKEN` | نعم (للوحة الويب) | تختاره |
 | `DEEPSEEK_API_KEY` | للذكاء | platform.deepseek.com |
-| `EMBED_MODEL` | للبحث الدلالي/PDF | `bge-m3` (يُنزَّل تلقائياً) |
+| `EMBED_MODEL` | للبحث الدلالي/PDF | `nomic-embed-text` خفيف (يُنزَّل تلقائياً)؛ يمكن الترقية لـ `bge-m3` على خادم قوي |
 | `UNPAYWALL_EMAIL` | لميزة OA | بريدك |
 
 > `DATABASE_URL` و`OLLAMA_URL` يُضبَطان تلقائياً في `docker-compose.yml` — لا تضعهما.
@@ -23,7 +23,7 @@ cp .env.example .env && nano .env     # املأ الأسرار أعلاه
 docker compose up -d --build
 docker compose logs -f bot            # تابع: "منهل bot starting"
 ```
-خدمة `ollama-pull` تُنزّل `bge-m3` تلقائياً (دقائق)؛ يصبح البحث الدلالي ومحادثة
+خدمة `ollama-pull` تُنزّل `nomic-embed-text` تلقائياً (دقائق)؛ يصبح البحث الدلالي ومحادثة
 PDF جاهزين بعد اكتمالها.
 
 ## 3) النشر عبر Coolify (موصى به لـ HTTPS تلقائي)
@@ -31,7 +31,7 @@ PDF جاهزين بعد اكتمالها.
 2. أضِف الأسرار في تبويب **Environment Variables**.
 3. اربط نطاقاً فرعياً (مثل `manhal-admin.example.com`) بخدمة `bot` منفذ `8080` —
    Coolify يصدر شهادة HTTPS تلقائياً عبر Traefik.
-4. **Deploy**، ثم نزّل النموذج إن لم يكتمل: طرفية حاوية `ollama` → `ollama pull bge-m3`.
+4. **Deploy**، ثم نزّل النموذج إن لم يكتمل: طرفية حاوية `ollama` → `ollama pull nomic-embed-text`.
 
 ## 4) الأمان
 - لا تعرّض `:8080` على الإنترنت بلا HTTPS — استخدم نطاق Coolify أو Cloudflare Tunnel.
