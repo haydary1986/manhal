@@ -119,6 +119,8 @@ var actionOptions = []struct{ Key, Label string }{
 	{"ai", "🤖 المساعد الذكي"},
 	{"humanize", "✍️ إعادة كتابة بشرية"},
 	{"pdf2word", "📄➡️ PDF إلى Word"},
+	{"similar", "🔗 أوراق مشابهة"},
+	{"retracted", "🚫 كشف الأوراق المسحوبة"},
 	{"library", "⭐ مكتبتي"},
 	{"semantic", "🧠 بحث دلالي بمكتبتي"},
 	{"support", "📞 الدعم الفني"},

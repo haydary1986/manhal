@@ -111,13 +111,14 @@ func main() {
 	// AI provider reads its key live from settings so the admin can change it.
 	aiProvider := ai.NewDeepSeek(settingsMgr.DeepSeekKey())
 	aiProvider.SetKeyFunc(settingsMgr.DeepSeekKey)
+	crossref := scholar.NewCrossref(cfg.CrossrefMailto)
 
 	app, err := bot.New(bot.Deps{
 		Config:      cfg,
 		Settings:    settingsMgr,
 		Store:       st,
 		AI:          aiProvider,
-		Citations:   scholar.NewCrossref(cfg.CrossrefMailto),
+		Citations:   crossref,
 		Search:      openAlex,
 		Authors:     openAlex,
 		AuthorWorks: openAlex,
@@ -130,6 +131,8 @@ func main() {
 		Disciplines: disciplinesMgr,
 		Menu:        menuMgr,
 		Embed:       embedder,
+		Related:     openAlex,
+		Retraction:  crossref,
 	})
 
 	// The bot acts as the push notifier for admin support replies; nil when the

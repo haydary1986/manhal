@@ -39,7 +39,9 @@ type Deps struct {
 	Announce    *announce.Repo
 	Disciplines *config.DisciplinesManager
 	Menu        *menu.Manager
-	Embed       embed.Provider // nil disables semantic features
+	Embed       embed.Provider    // nil disables semantic features
+	Related     RelatedSource     // similar-papers lookup
+	Retraction  RetractionChecker // retracted-paper check
 }
 
 // App wires the Telegram adapter with the core dependencies.
@@ -62,6 +64,8 @@ type App struct {
 	disciplines  *config.DisciplinesManager
 	menu         *menu.Manager
 	embed        embed.Provider
+	related      RelatedSource
+	retraction   RetractionChecker
 	usage        *usageLimiter
 	sessions     *sessions
 }
@@ -86,6 +90,8 @@ func New(d Deps) (*App, error) {
 		disciplines:  d.Disciplines,
 		menu:         d.Menu,
 		embed:        d.Embed,
+		related:      d.Related,
+		retraction:   d.Retraction,
 		sessions:     newSessions(),
 	}
 	// Tier-aware daily AI quota (free vs premium), resolved per user at call time.
@@ -260,6 +266,12 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	case stateAwaitHumanize:
 		a.handleHumanizeText(ctx, msg)
+		return
+	case stateAwaitSimilarDOI:
+		a.handleSimilarDOI(ctx, msg)
+		return
+	case stateAwaitRetractDOI:
+		a.handleRetractDOI(ctx, msg)
 		return
 	case stateAwaitFollowTopic:
 		a.sessions.clear(msg.From.ID)

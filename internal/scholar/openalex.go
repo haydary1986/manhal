@@ -128,6 +128,78 @@ func (o *OpenAlex) Search(ctx context.Context, query string, limit int) ([]Searc
 	return results, nil
 }
 
+// Related returns papers OpenAlex links as related to the given DOI.
+func (o *OpenAlex) Related(ctx context.Context, doi string, limit int) ([]SearchResult, error) {
+	clean, ok := NormalizeDOI(doi)
+	if !ok {
+		return nil, ErrInvalidDOI
+	}
+	if limit <= 0 || limit > 10 {
+		limit = 6
+	}
+
+	// 1) Fetch the work's related_works ids.
+	u1 := o.baseURL + "?filter=doi:" + url.QueryEscape(clean) + "&select=related_works&per-page=1"
+	if o.mailto != "" {
+		u1 += "&mailto=" + url.QueryEscape(o.mailto)
+	}
+	b1, err := o.fetchJSON(ctx, u1)
+	if err != nil {
+		return nil, err
+	}
+	var wr struct {
+		Results []struct {
+			RelatedWorks []string `json:"related_works"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(b1, &wr); err != nil {
+		return nil, err
+	}
+	if len(wr.Results) == 0 || len(wr.Results[0].RelatedWorks) == 0 {
+		return nil, nil
+	}
+	var ids []string
+	for _, r := range wr.Results[0].RelatedWorks {
+		if id := r[strings.LastIndex(r, "/")+1:]; id != "" {
+			ids = append(ids, id)
+		}
+		if len(ids) >= limit {
+			break
+		}
+	}
+
+	// 2) Fetch those works' details.
+	u2 := o.baseURL + "?filter=openalex_id:" + strings.Join(ids, "|") +
+		"&select=title,display_name,publication_year,cited_by_count,doi,authorships,primary_location&per-page=" + strconv.Itoa(limit)
+	if o.mailto != "" {
+		u2 += "&mailto=" + url.QueryEscape(o.mailto)
+	}
+	b2, err := o.fetchJSON(ctx, u2)
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenAlex(b2)
+}
+
+// fetchJSON performs a GET and returns the body.
+func (o *OpenAlex) fetchJSON(ctx context.Context, u string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Manhal/0.1 (academic search bot)")
+	req.Header.Set("Accept", "application/json")
+	resp, err := o.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openalex request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openalex: unexpected status %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+}
+
 // --- OpenAlex JSON shape (only the fields we use) ---
 
 type openAlexResponse struct {

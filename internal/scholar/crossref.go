@@ -87,6 +87,80 @@ func (c *Crossref) FetchByDOI(ctx context.Context, doi string) (*cite.Work, erro
 	return parseCrossref(body)
 }
 
+// Retraction reports a confirmed retraction of a DOI (via Crossref / Retraction
+// Watch). retracted is false when no retraction record exists.
+type Retraction struct {
+	Retracted bool
+	NoticeDOI string // DOI of the retraction notice, if any
+	Date      string // YYYY-MM-DD of the retraction, if known
+}
+
+// CheckRetraction queries Crossref for update notices that retract the given
+// DOI. It is advisory: a false result means "no retraction found", not a
+// guarantee of integrity.
+func (c *Crossref) CheckRetraction(ctx context.Context, doi string) (Retraction, error) {
+	clean, ok := NormalizeDOI(doi)
+	if !ok {
+		return Retraction{}, ErrInvalidDOI
+	}
+	endpoint := "https://api.crossref.org/works?rows=10&select=DOI,update-to&filter=updates:" + url.QueryEscape(clean)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return Retraction{}, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return Retraction{}, fmt.Errorf("crossref request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return Retraction{}, fmt.Errorf("crossref: unexpected status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return Retraction{}, fmt.Errorf("crossref read: %w", err)
+	}
+
+	var doc struct {
+		Message struct {
+			Items []struct {
+				DOI      string `json:"DOI"`
+				UpdateTo []struct {
+					DOI     string `json:"DOI"`
+					Type    string `json:"type"`
+					Updated struct {
+						DateParts [][]int `json:"date-parts"`
+					} `json:"updated"`
+				} `json:"update-to"`
+			} `json:"items"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return Retraction{}, fmt.Errorf("crossref parse: %w", err)
+	}
+
+	for _, it := range doc.Message.Items {
+		for _, ut := range it.UpdateTo {
+			if !strings.Contains(strings.ToLower(ut.Type), "retract") {
+				continue
+			}
+			if !strings.EqualFold(ut.DOI, clean) {
+				continue
+			}
+			r := Retraction{Retracted: true, NoticeDOI: it.DOI}
+			if len(ut.Updated.DateParts) > 0 && len(ut.Updated.DateParts[0]) >= 3 {
+				p := ut.Updated.DateParts[0]
+				r.Date = fmt.Sprintf("%04d-%02d-%02d", p[0], p[1], p[2])
+			}
+			return r, nil
+		}
+	}
+	return Retraction{}, nil
+}
+
 func (c *Crossref) userAgent() string {
 	ua := "Manhal/0.1 (https://t.me; academic citation bot)"
 	if c.mailto != "" {
