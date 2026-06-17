@@ -464,6 +464,37 @@ func (s *Server) renderDisciplines(w http.ResponseWriter, ctx context.Context, m
 	writeHTML(w, disciplinesTemplate, vm)
 }
 
+// ---------- predatory editor ----------
+
+type predatorRowVM struct {
+	Pattern string
+	Reason  string
+}
+
+type predatorVM struct {
+	layout
+	Items    []predatorRowVM
+	Msg, Err string
+}
+
+// renderPredatory renders the predatory-journal watch-list editor.
+func (s *Server) renderPredatory(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := predatorVM{Msg: msg, Err: errMsg}
+	if s.predators != nil {
+		for _, f := range s.predators.All() {
+			vm.Items = append(vm.Items, predatorRowVM{Pattern: f.Pattern, Reason: f.Reason})
+		}
+	}
+	vm.layout = layout{
+		Title:     "منهل — القائمة المفترسة",
+		Heading:   "🚩 القائمة المفترسة",
+		Sub:       "أنماط تُحذّر المستخدم عند فحص المجلات (إرشادية)",
+		Active:    "predatory",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, predatoryTemplate, vm)
+}
+
 // ---------- gift codes ----------
 
 type giftRowVM struct {
@@ -953,6 +984,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
       <a href="/admin/disciplines" class="{{if eq .Active "disciplines"}}active{{end}}">🏷️ <span class="t">التخصصات</span></a>
+      <a href="/admin/predatory" class="{{if eq .Active "predatory"}}active{{end}}">🚩 <span class="t">القائمة المفترسة</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -1236,6 +1268,46 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
   {{else}}
   <div class="empty">لا مستخدمون بعد.</div>
   {{end}}
+</div>
+` + layoutFoot))
+
+var predatoryTemplate = template.Must(template.New("predatory").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="card">
+  <h3>➕ إضافة نمط</h3>
+  <p style="color:#64748b;font-size:13px;margin:0 0 12px">النمط يُطابَق كنصّ فرعي في اسم المجلة/الناشر (غير حسّاس لحالة الأحرف).</p>
+  <form method="post" action="/admin/predatory/add">
+    <div class="grid2">
+      <div>
+        <label>النمط</label>
+        <input name="pattern" placeholder="مثال: international journal of" required>
+      </div>
+      <div>
+        <label>السبب (يظهر للمستخدم)</label>
+        <input name="reason" placeholder="ناشر مشبوه برسوم نشر مرتفعة">
+      </div>
+    </div>
+    <button class="btn" type="submit">إضافة</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>📋 الأنماط الحالية</h3>
+  <ul class="list">
+    {{range .Items}}
+    <li>
+      <span><code style="font-family:monospace">{{.Pattern}}</code>{{if .Reason}} <span class="id">— {{.Reason}}</span>{{end}}</span>
+      <form class="inline" method="post" action="/admin/predatory/delete" onsubmit="return confirm('حذف هذا النمط؟');">
+        <input type="hidden" name="pattern" value="{{.Pattern}}">
+        <button class="btn-del" type="submit">حذف</button>
+      </form>
+    </li>
+    {{else}}
+    <li class="empty">لا أنماط بعد.</li>
+    {{end}}
+  </ul>
 </div>
 ` + layoutFoot))
 

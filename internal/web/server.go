@@ -17,6 +17,7 @@ import (
 	"github.com/erticaz/manhal/internal/config"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
+	"github.com/erticaz/manhal/internal/predator"
 )
 
 // Data is the persistence the admin panel reads from: support tickets plus the
@@ -52,6 +53,14 @@ type DisciplinesEditor interface {
 	List() []config.Discipline
 	Add(id, label string) error
 	Remove(id string) error
+}
+
+// PredatorEditor is the editable predatory-journal watch list (implemented by
+// predator.List).
+type PredatorEditor interface {
+	All() []predator.Flag
+	Add(pattern, reason string) error
+	Remove(pattern string) error
 }
 
 // Announcements is the editable announcements store (implemented by
@@ -122,13 +131,15 @@ type Server struct {
 	settings    Settings
 	announce    Announcements
 	disciplines DisciplinesEditor
+	predators   PredatorEditor
 	accounts    map[string]string // username -> password
 }
 
 // WithEditors attaches optional reference-table editors (set from main; tests
 // that don't exercise these pages leave them nil).
-func (s *Server) WithEditors(disciplines DisciplinesEditor) *Server {
+func (s *Server) WithEditors(disciplines DisciplinesEditor, predators PredatorEditor) *Server {
 	s.disciplines = disciplines
+	s.predators = predators
 	return s
 }
 
@@ -163,6 +174,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/disciplines", s.auth(s.handleDisciplines))
 	mux.HandleFunc("/admin/disciplines/add", s.auth(s.handleDisciplineAdd))
 	mux.HandleFunc("/admin/disciplines/delete", s.auth(s.handleDisciplineDelete))
+	mux.HandleFunc("/admin/predatory", s.auth(s.handlePredatory))
+	mux.HandleFunc("/admin/predatory/add", s.auth(s.handlePredatoryAdd))
+	mux.HandleFunc("/admin/predatory/delete", s.auth(s.handlePredatoryDelete))
 	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
 	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
@@ -616,6 +630,47 @@ func (s *Server) handleDisciplineDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/admin/disciplines?msg="+urlencode("تم حذف التخصص"), http.StatusSeeOther)
+}
+
+// handlePredatory renders the predatory-journal watch-list editor.
+func (s *Server) handlePredatory(w http.ResponseWriter, r *http.Request) {
+	s.renderPredatory(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handlePredatoryAdd adds a watch-list pattern.
+func (s *Server) handlePredatoryAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.predators == nil {
+		http.Redirect(w, r, "/admin/predatory?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.predators.Add(r.FormValue("pattern"), r.FormValue("reason")); err != nil {
+		http.Redirect(w, r, "/admin/predatory?err="+urlencode("تعذّرت الإضافة (نمط مكرّر أو فارغ)"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/predatory?msg="+urlencode("تمت إضافة النمط"), http.StatusSeeOther)
+}
+
+// handlePredatoryDelete removes a watch-list pattern.
+func (s *Server) handlePredatoryDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.predators == nil {
+		http.Redirect(w, r, "/admin/predatory?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.predators.Remove(r.FormValue("pattern")); err != nil {
+		http.Redirect(w, r, "/admin/predatory?err="+urlencode("النمط غير موجود"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/predatory?msg="+urlencode("تم حذف النمط"), http.StatusSeeOther)
 }
 
 // handleGiftCodes renders the gift-code generator and list.
