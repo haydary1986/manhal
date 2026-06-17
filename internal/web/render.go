@@ -433,6 +433,38 @@ func (s *Server) renderAnnouncements(w http.ResponseWriter, msg, errMsg string) 
 	writeHTML(w, announceTemplate, vm)
 }
 
+// ---------- broadcast ----------
+
+type broadcastVM struct {
+	layout
+	Total    int
+	Premium  int
+	Free     int
+	Msg, Err string
+}
+
+// renderBroadcast renders the broadcast composer with recipient counts.
+func (s *Server) renderBroadcast(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := broadcastVM{Msg: msg, Err: errMsg}
+	now := time.Now()
+	users, _ := s.data.ListUsers(ctx)
+	vm.Total = len(users)
+	for _, u := range users {
+		if u.IsPremium(now) {
+			vm.Premium++
+		}
+	}
+	vm.Free = vm.Total - vm.Premium
+	vm.layout = layout{
+		Title:     "منهل — البث الجماعي",
+		Heading:   "📣 البث الجماعي",
+		Sub:       "أرسل رسالة أو إعلاناً لكل المستخدمين دفعة واحدة",
+		Active:    "broadcast",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, broadcastTemplate, vm)
+}
+
 // ---------- logs ----------
 
 type logLineVM struct {
@@ -794,6 +826,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
       <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
+      <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -1073,6 +1106,45 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
   {{else}}
   <div class="empty">لا مستخدمون بعد.</div>
   {{end}}
+</div>
+` + layoutFoot))
+
+var broadcastTemplate = template.Must(template.New("broadcast").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">📣 {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="stats">
+  <div class="stat"><div class="num">{{.Total}}</div><div class="lbl">👥 الكل</div></div>
+  <div class="stat"><div class="num">{{.Premium}}</div><div class="lbl">💎 البريميم</div></div>
+  <div class="stat"><div class="num">{{.Free}}</div><div class="lbl">🆓 المجاني</div></div>
+</div>
+
+<div class="card" style="max-width:660px">
+  <h3>📣 رسالة بث جديدة</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 14px">تصل الرسالة لكل المستخدمين في تلكرام. الإرسال يتم تدريجياً لاحترام حدود تلكرام.</p>
+  <form method="post" action="/admin/broadcast/send" onsubmit="return confirm('إرسال هذا البث؟');">
+    <label>نص الرسالة</label>
+    <textarea name="text" rows="4" placeholder="اكتب رسالتك أو إعلانك هنا..." required></textarea>
+    <label>رابط صورة (اختياري)</label>
+    <input name="image" placeholder="https://example.org/banner.jpg">
+    <div class="grid2">
+      <div>
+        <label>نص زر (اختياري)</label>
+        <input name="button_label" placeholder="افتح الرابط">
+      </div>
+      <div>
+        <label>رابط الزر (اختياري)</label>
+        <input name="button_url" placeholder="https://...">
+      </div>
+    </div>
+    <label>المستهدَفون</label>
+    <select name="target">
+      <option value="all">الكل ({{.Total}})</option>
+      <option value="premium">البريميم فقط ({{.Premium}})</option>
+      <option value="free">المجاني فقط ({{.Free}})</option>
+    </select>
+    <button class="btn block" type="submit">🚀 إرسال البث</button>
+  </form>
 </div>
 ` + layoutFoot))
 

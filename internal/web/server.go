@@ -35,9 +35,11 @@ type Data interface {
 	UsageByHour(ctx context.Context) ([24]int, error)
 }
 
-// Notifier pushes an admin reply back to a user (implemented by the bot).
+// Notifier pushes messages from the admin to users (implemented by the bot).
 type Notifier interface {
 	Notify(userID int64, text string) error
+	// SendRich delivers a broadcast: optional image (URL) + optional URL button.
+	SendRich(userID int64, text, imageURL, buttonLabel, buttonURL string) error
 }
 
 // Announcements is the editable announcements store (implemented by
@@ -134,6 +136,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/menu/delete", s.auth(s.handleDelete))
 	mux.HandleFunc("/admin/support", s.auth(s.handleSupport))
 	mux.HandleFunc("/admin/support/reply", s.auth(s.handleSupportReply))
+	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
+	mux.HandleFunc("/admin/broadcast/send", s.auth(s.handleBroadcastSend))
 	mux.HandleFunc("/admin/logs", s.auth(s.handleLogs))
 	mux.HandleFunc("/admin/settings", s.auth(s.handleSettings))
 	mux.HandleFunc("/admin/settings/gate", s.auth(s.handleSetGate))
@@ -506,6 +510,63 @@ func (s *Server) handleSetAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ مفتاح DeepSeek — فعّال فوراً"), http.StatusSeeOther)
+}
+
+// handleBroadcast renders the broadcast composer.
+func (s *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
+	s.renderBroadcast(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleBroadcastSend pushes a message to all (or a tier of) users.
+func (s *Server) handleBroadcastSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.notifier == nil {
+		http.Redirect(w, r, "/admin/broadcast?err="+urlencode("البوت غير متصل — تعذّر البث"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	text := strings.TrimSpace(r.FormValue("text"))
+	if text == "" {
+		http.Redirect(w, r, "/admin/broadcast?err="+urlencode("نص الرسالة مطلوب"), http.StatusSeeOther)
+		return
+	}
+	image := normalizeLink(r.FormValue("image"))
+	btnLabel := strings.TrimSpace(r.FormValue("button_label"))
+	btnURL := normalizeLink(r.FormValue("button_url"))
+	if btnURL != "" && !validLink(btnURL) {
+		http.Redirect(w, r, "/admin/broadcast?err="+urlencode("رابط الزر غير صالح"), http.StatusSeeOther)
+		return
+	}
+	target := r.FormValue("target")
+
+	users, _ := s.data.ListUsers(r.Context())
+	ids := broadcastTargets(users, target, time.Now())
+
+	// Fire-and-forget with light rate limiting to respect Telegram's limits.
+	notifier := s.notifier
+	go func() {
+		for _, id := range ids {
+			_ = notifier.SendRich(id, text, image, btnLabel, btnURL)
+			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+	http.Redirect(w, r, "/admin/broadcast?msg="+urlencode("بدأ البث إلى "+strconv.Itoa(len(ids))+" مستخدم"), http.StatusSeeOther)
+}
+
+// broadcastTargets filters users to the chosen tier ("premium"/"free"/else all).
+func broadcastTargets(users []domain.User, target string, now time.Time) []int64 {
+	var ids []int64
+	for _, u := range users {
+		prem := u.IsPremium(now)
+		if (target == "premium" && !prem) || (target == "free" && prem) {
+			continue
+		}
+		ids = append(ids, u.TelegramID)
+	}
+	return ids
 }
 
 // handleLogs renders recent system logs for diagnosis.

@@ -27,6 +27,11 @@ func (f *fakeNotifier) Notify(userID int64, text string) error {
 	return nil
 }
 
+func (f *fakeNotifier) SendRich(userID int64, text, imageURL, buttonLabel, buttonURL string) error {
+	f.userID, f.text, f.calls = userID, text, f.calls+1
+	return nil
+}
+
 // fakeSettings is an in-memory Settings double for tests.
 type fakeSettings struct {
 	channel        string
