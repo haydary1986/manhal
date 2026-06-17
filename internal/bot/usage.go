@@ -22,12 +22,13 @@ func (a *App) recordUsage(_ context.Context, userID int64, action string) {
 }
 
 // usageLimiter enforces a per-user daily quota for AI requests, to bound cost.
-// It is in-memory and resets on restart (a durable store comes with Postgres).
-// A limit <= 0 means unlimited.
+// It is in-memory and resets on restart. The applicable limit is resolved per
+// user via limitFor (so it can vary by subscription tier); a limit <= 0 means
+// unlimited.
 type usageLimiter struct {
-	mu    sync.Mutex
-	limit int
-	used  map[int64]dayCount
+	mu       sync.Mutex
+	limitFor func(userID int64) int
+	used     map[int64]dayCount
 }
 
 type dayCount struct {
@@ -35,8 +36,16 @@ type dayCount struct {
 	n   int
 }
 
-func newUsageLimiter(limit int) *usageLimiter {
-	return &usageLimiter{limit: limit, used: make(map[int64]dayCount)}
+func newUsageLimiter(limitFor func(userID int64) int) *usageLimiter {
+	return &usageLimiter{limitFor: limitFor, used: make(map[int64]dayCount)}
+}
+
+// limit returns the user's applicable daily limit (0/negative => unlimited).
+func (u *usageLimiter) limit(userID int64) int {
+	if u.limitFor == nil {
+		return 0
+	}
+	return u.limitFor(userID)
 }
 
 // dayKey is the UTC calendar day used to bucket usage.
@@ -52,21 +61,19 @@ func (u *usageLimiter) countToday(userID int64) int {
 	return c.n
 }
 
-// allow reports whether the user is under the daily limit (no increment).
+// allow reports whether the user is under their daily limit (no increment).
 func (u *usageLimiter) allow(userID int64) bool {
-	if u.limit <= 0 {
+	limit := u.limit(userID)
+	if limit <= 0 {
 		return true
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.countToday(userID) < u.limit
+	return u.countToday(userID) < limit
 }
 
 // record increments today's count for the user.
 func (u *usageLimiter) record(userID int64) {
-	if u.limit <= 0 {
-		return
-	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	today := dayKey()
@@ -80,13 +87,29 @@ func (u *usageLimiter) record(userID int64) {
 
 // remaining returns the user's remaining quota today; -1 means unlimited.
 func (u *usageLimiter) remaining(userID int64) int {
-	if u.limit <= 0 {
+	limit := u.limit(userID)
+	if limit <= 0 {
 		return -1
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if r := u.limit - u.countToday(userID); r > 0 {
+	if r := limit - u.countToday(userID); r > 0 {
 		return r
 	}
 	return 0
+}
+
+// aiLimit resolves a user's daily AI quota from the admin-configured tier limits
+// (free vs premium), falling back to the env default. A premium limit of 0 means
+// unlimited for subscribers.
+func (a *App) aiLimit(userID int64) int {
+	bs := a.settings.Get()
+	free := bs.FreeAILimit
+	if free == 0 {
+		free = a.cfg.AIDailyLimit
+	}
+	if u, err := a.store.GetUser(context.Background(), userID); err == nil && u.IsPremium(time.Now()) {
+		return bs.PremiumAILimit // 0 => unlimited
+	}
+	return free
 }

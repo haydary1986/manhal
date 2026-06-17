@@ -34,6 +34,8 @@ type fakeSettings struct {
 	premiumInfo    string
 	paymentDetails string
 	paymentLink    string
+	freeLimit      int
+	premiumLimit   int
 }
 
 func (f *fakeSettings) RequiredChannel() string   { return f.channel }
@@ -50,6 +52,12 @@ func (f *fakeSettings) PaymentDetails() string { return f.paymentDetails }
 func (f *fakeSettings) PaymentLink() string    { return f.paymentLink }
 func (f *fakeSettings) SetPayment(premiumInfo, paymentDetails, paymentLink string) error {
 	f.premiumInfo, f.paymentDetails, f.paymentLink = premiumInfo, paymentDetails, paymentLink
+	return nil
+}
+func (f *fakeSettings) FreeAILimit() int    { return f.freeLimit }
+func (f *fakeSettings) PremiumAILimit() int { return f.premiumLimit }
+func (f *fakeSettings) SetLimits(free, premium int) error {
+	f.freeLimit, f.premiumLimit = free, premium
 	return nil
 }
 

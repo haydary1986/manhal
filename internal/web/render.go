@@ -441,6 +441,8 @@ type settingsVM struct {
 	PremiumInfo    string
 	PaymentDetails string
 	PaymentLink    string
+	FreeLimit      int
+	PremiumLimit   int
 	Msg, Err       string
 }
 
@@ -453,6 +455,8 @@ func (s *Server) renderSettings(w http.ResponseWriter, ctx context.Context, msg,
 		vm.PremiumInfo = s.settings.PremiumInfo()
 		vm.PaymentDetails = s.settings.PaymentDetails()
 		vm.PaymentLink = s.settings.PaymentLink()
+		vm.FreeLimit = s.settings.FreeAILimit()
+		vm.PremiumLimit = s.settings.PremiumAILimit()
 	}
 	vm.layout = layout{
 		Title:     "منهل — الإعدادات",
@@ -1073,6 +1077,27 @@ var settingsTemplate = template.Must(template.New("settings").Parse(layoutHead +
     <label>رابط دفع مباشر (اختياري — يفتح التطبيق)</label>
     <input name="payment_link" value="{{.PaymentLink}}" placeholder="https://zaincash.iq/... أو رابط محفظة">
     <button class="btn" type="submit">💾 حفظ إعدادات الدفع</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:640px">
+  <h3>📊 حدود الاستخدام اليومية (أدوات الذكاء)</h3>
+  <p style="color:#64748b;font-size:14px;margin:0 0 14px;line-height:1.7">
+    عدد طلبات أدوات الذكاء المسموحة لكل مستخدم يومياً. <b>0 = بلا حدود.</b>
+    تُحفّز الفرق بين المجاني والمميّز المستخدمين على الاشتراك.
+  </p>
+  <form method="post" action="/admin/settings/limits">
+    <div class="grid2">
+      <div>
+        <label>الحد المجاني (طلبات/يوم)</label>
+        <input type="number" name="free_limit" min="0" value="{{.FreeLimit}}" placeholder="5">
+      </div>
+      <div>
+        <label>حد المميّز (طلبات/يوم — 0 = بلا حدود)</label>
+        <input type="number" name="premium_limit" min="0" value="{{.PremiumLimit}}" placeholder="0">
+      </div>
+    </div>
+    <button class="btn" type="submit">💾 حفظ الحدود</button>
   </form>
 </div>
 ` + layoutFoot))

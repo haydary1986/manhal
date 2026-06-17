@@ -11,7 +11,7 @@ import (
 func aiApp(deepSeekKey string, limit int) *App {
 	return &App{
 		cfg:      &config.Config{DeepSeekKey: deepSeekKey},
-		usage:    newUsageLimiter(limit),
+		usage:    newUsageLimiter(constLimit(limit)),
 		sessions: newSessions(),
 	}
 }

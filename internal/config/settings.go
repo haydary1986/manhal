@@ -23,6 +23,10 @@ type BotSettings struct {
 	PremiumInfo    string `yaml:"premium_info"`
 	PaymentDetails string `yaml:"payment_details"`
 	PaymentLink    string `yaml:"payment_link"`
+	// Daily AI-request quotas by tier. 0 = use the env default (free) or
+	// unlimited (premium).
+	FreeAILimit    int `yaml:"free_ai_limit"`
+	PremiumAILimit int `yaml:"premium_ai_limit"`
 }
 
 // DefaultBotSettings is the seed used when no file is present.
@@ -123,6 +127,30 @@ func (m *SettingsManager) PaymentDetails() string { return m.Get().PaymentDetail
 
 // PaymentLink returns the optional deep link / payment URL ("" if unset).
 func (m *SettingsManager) PaymentLink() string { return m.Get().PaymentLink }
+
+// FreeAILimit / PremiumAILimit return the configured daily AI quotas.
+func (m *SettingsManager) FreeAILimit() int    { return m.Get().FreeAILimit }
+func (m *SettingsManager) PremiumAILimit() int { return m.Get().PremiumAILimit }
+
+// SetLimits updates the per-tier daily AI quotas (clamped to >= 0) and persists.
+func (m *SettingsManager) SetLimits(free, premium int) error {
+	if free < 0 {
+		free = 0
+	}
+	if premium < 0 {
+		premium = 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.cur
+	next.FreeAILimit = free
+	next.PremiumAILimit = premium
+	if err := SaveBotSettings(m.dataDir, &next); err != nil {
+		return err
+	}
+	m.cur = next
+	return nil
+}
 
 // SetPayment updates the premium description, payment details and optional pay
 // link, then persists.

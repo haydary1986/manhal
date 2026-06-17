@@ -58,6 +58,9 @@ type Settings interface {
 	PaymentDetails() string
 	PaymentLink() string
 	SetPayment(premiumInfo, paymentDetails, paymentLink string) error
+	FreeAILimit() int
+	PremiumAILimit() int
+	SetLimits(free, premium int) error
 }
 
 // actionOptions are the leaf actions an admin can attach to a button, plus the
@@ -132,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/settings", s.auth(s.handleSettings))
 	mux.HandleFunc("/admin/settings/gate", s.auth(s.handleSetGate))
 	mux.HandleFunc("/admin/settings/payment", s.auth(s.handleSetPayment))
+	mux.HandleFunc("/admin/settings/limits", s.auth(s.handleSetLimits))
 	return mux
 }
 
@@ -192,6 +196,26 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 // handleMenuPage renders the button-management page.
 func (s *Server) handleMenuPage(w http.ResponseWriter, r *http.Request) {
 	s.renderMenu(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleSetLimits saves the per-tier daily AI usage limits.
+func (s *Server) handleSetLimits(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.settings == nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("الإعدادات غير متاحة"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	free, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("free_limit")))
+	premium, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("premium_limit")))
+	if err := s.settings.SetLimits(free, premium); err != nil {
+		http.Redirect(w, r, "/admin/settings?err="+urlencode("تعذّر حفظ الحدود"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?msg="+urlencode("تم حفظ حدود الاستخدام"), http.StatusSeeOther)
 }
 
 // handleAnnouncements renders the announcement composer + list.

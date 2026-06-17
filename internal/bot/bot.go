@@ -85,9 +85,10 @@ func New(d Deps) (*App, error) {
 		disciplines:  d.Disciplines,
 		menu:         d.Menu,
 		embed:        d.Embed,
-		usage:        newUsageLimiter(d.Config.AIDailyLimit),
 		sessions:     newSessions(),
 	}
+	// Tier-aware daily AI quota (free vs premium), resolved per user at call time.
+	a.usage = newUsageLimiter(a.aiLimit)
 
 	b, err := tg.New(d.Config.BotToken, tg.WithDefaultHandler(a.defaultHandler))
 	if err != nil {
