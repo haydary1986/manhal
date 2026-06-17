@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,17 @@ func (o *OpenAlex) Search(ctx context.Context, query string, limit int) ([]Searc
 	if limit <= 0 || limit > 25 {
 		limit = 5
 	}
+	// Fetch a wider candidate pool than we display, then re-rank by citation
+	// impact. OpenAlex relevance can rank spam records (reused famous titles)
+	// above the canonical paper; the real paper almost always has vastly more
+	// citations, so this surfaces it and avoids fabricated-looking results.
+	fetch := limit * 3
+	if fetch < 12 {
+		fetch = 12
+	}
+	if fetch > 25 {
+		fetch = 25
+	}
 
 	u, err := url.Parse(o.baseURL)
 	if err != nil {
@@ -74,7 +86,7 @@ func (o *OpenAlex) Search(ctx context.Context, query string, limit int) ([]Searc
 	}
 	q := u.Query()
 	q.Set("search", query)
-	q.Set("per-page", strconv.Itoa(limit))
+	q.Set("per-page", strconv.Itoa(fetch))
 	q.Set("select", "title,display_name,publication_year,cited_by_count,doi,authorships,primary_location")
 	if o.mailto != "" {
 		q.Set("mailto", o.mailto)
@@ -101,7 +113,19 @@ func (o *OpenAlex) Search(ctx context.Context, query string, limit int) ([]Searc
 	if err != nil {
 		return nil, fmt.Errorf("openalex read: %w", err)
 	}
-	return parseOpenAlex(body)
+	results, err := parseOpenAlex(body)
+	if err != nil {
+		return nil, err
+	}
+	// Re-rank the relevance-matched candidates by citation count (impact first),
+	// then return only the requested number.
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].CitedBy > results[j].CitedBy
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
 }
 
 // --- OpenAlex JSON shape (only the fields we use) ---

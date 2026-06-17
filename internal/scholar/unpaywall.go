@@ -40,9 +40,17 @@ type Unpaywall struct {
 	email   string // required by Unpaywall
 }
 
-// NewUnpaywall builds an Unpaywall client. email is required by the API; when
-// empty, FindOA returns ErrNotConfigured.
+// defaultUnpaywallEmail is a polite-pool contact used when the admin hasn't set
+// one, so the open-access feature works out of the box. Unpaywall only needs a
+// contact address, not a deliverable inbox.
+const defaultUnpaywallEmail = "manhal-bot@users.noreply.github.com"
+
+// NewUnpaywall builds an Unpaywall client. When email is empty a default contact
+// is used so the feature stays enabled.
 func NewUnpaywall(email string) *Unpaywall {
+	if email == "" {
+		email = defaultUnpaywallEmail
+	}
 	return &Unpaywall{
 		http:    &http.Client{Timeout: 15 * time.Second},
 		baseURL: unpaywallBase,

@@ -5,6 +5,7 @@ package bot
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/erticaz/manhal/internal/ai"
 	"github.com/erticaz/manhal/internal/announce"
@@ -127,15 +128,40 @@ func (a *App) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
-// send delivers a Screen to a chat.
+// send delivers a Screen to a chat. We send plain text (no parse_mode) for
+// reliability, so any Markdown the AI emits (**bold**, ### headings) is cleaned
+// to avoid showing raw symbols.
 func (a *App) send(ctx context.Context, chatID int64, s Screen) {
-	params := &tg.SendMessageParams{ChatID: chatID, Text: s.Text}
+	params := &tg.SendMessageParams{ChatID: chatID, Text: cleanMarkdown(s.Text)}
 	if m := s.Keyboard.markup(); m != nil {
 		params.ReplyMarkup = m
 	}
 	if _, err := a.bot.SendMessage(ctx, params); err != nil {
 		a.logf("send error: %v", err)
 	}
+}
+
+// cleanMarkdown removes Markdown emphasis/heading markers that Telegram shows
+// literally in plain-text mode: **bold** -> bold, "### Title" -> "Title". Only
+// "#" runs followed by a space are treated as headings, so "#1" is left intact.
+func cleanMarkdown(s string) string {
+	if s == "" {
+		return s
+	}
+	s = strings.ReplaceAll(s, "**", "")
+	s = strings.ReplaceAll(s, "__", "")
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		trimmed := strings.TrimLeft(ln, " ")
+		h := 0
+		for h < len(trimmed) && trimmed[h] == '#' {
+			h++
+		}
+		if h > 0 && h < len(trimmed) && trimmed[h] == ' ' {
+			lines[i] = strings.TrimSpace(trimmed[h+1:])
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // defaultHandler routes any unrouted message: it either feeds an active wizard

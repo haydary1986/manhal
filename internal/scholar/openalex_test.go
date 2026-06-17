@@ -266,7 +266,9 @@ func TestSearch_HTTP(t *testing.T) {
 	if gotQuery.Get("mailto") != "dev@example.com" {
 		t.Errorf("mailto param = %q", gotQuery.Get("mailto"))
 	}
-	if gotQuery.Get("per-page") != "5" {
-		t.Errorf("per-page param = %q", gotQuery.Get("per-page"))
+	// Search fetches a wider candidate pool (limit*3, min 12), re-ranks by
+	// citations, then trims to the requested limit.
+	if gotQuery.Get("per-page") != "15" {
+		t.Errorf("per-page param = %q, want 15", gotQuery.Get("per-page"))
 	}
 }

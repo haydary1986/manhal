@@ -78,8 +78,10 @@ func TestFindOA_HTTP(t *testing.T) {
 }
 
 func TestFindOA_Errors(t *testing.T) {
-	if _, err := NewUnpaywall("").FindOA(context.Background(), "10.1/x"); err != ErrNotConfigured {
-		t.Errorf("no email => %v, want ErrNotConfigured", err)
+	// An empty email now falls back to a default contact, so the feature stays
+	// enabled; a malformed DOI is still rejected before any network call.
+	if _, err := NewUnpaywall("").FindOA(context.Background(), "garbage"); err != ErrInvalidDOI {
+		t.Errorf("empty email + bad doi => %v, want ErrInvalidDOI (feature should be enabled)", err)
 	}
 	if _, err := NewUnpaywall("e@x.com").FindOA(context.Background(), "garbage"); err != ErrInvalidDOI {
 		t.Errorf("bad doi => %v, want ErrInvalidDOI", err)
