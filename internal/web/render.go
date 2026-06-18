@@ -594,6 +594,82 @@ func (s *Server) renderPromotion(w http.ResponseWriter, ctx context.Context, msg
 	writeHTML(w, promotionTemplate, vm)
 }
 
+// ---------- subscriptions & revenue report ----------
+
+type planTallyVM struct {
+	Name    string
+	Count   int
+	Revenue int
+}
+
+type subsReportVM struct {
+	layout
+	ActiveUsers  int
+	ExpiredUsers int
+	Pending      int
+	Approved     int
+	Rejected     int
+	RevenueTotal int
+	RevenueMonth int
+	Plans        []planTallyVM
+}
+
+// renderSubsReport computes and renders the subscriptions & revenue report from
+// the user tiers and the decided requests (revenue = approved request prices).
+func (s *Server) renderSubsReport(w http.ResponseWriter, ctx context.Context) {
+	vm := subsReportVM{}
+	now := time.Now()
+
+	users, _ := s.data.ListUsers(ctx)
+	for i := range users {
+		switch {
+		case users[i].IsPremium(now):
+			vm.ActiveUsers++
+		case users[i].IsExpired(now):
+			vm.ExpiredUsers++
+		}
+	}
+
+	all, _ := s.data.ListSubscriptionRequests(ctx, "")
+	tally := map[string]*planTallyVM{}
+	for _, r := range all {
+		switch r.Status {
+		case domain.SubReqPending:
+			vm.Pending++
+		case domain.SubReqRejected:
+			vm.Rejected++
+		case domain.SubReqApproved:
+			vm.Approved++
+			vm.RevenueTotal += r.Price
+			if r.DecidedAt != nil && r.DecidedAt.Year() == now.Year() && r.DecidedAt.Month() == now.Month() {
+				vm.RevenueMonth += r.Price
+			}
+			name := r.PlanName
+			if name == "" {
+				name = "(غير مسمّاة)"
+			}
+			if tally[name] == nil {
+				tally[name] = &planTallyVM{Name: name}
+			}
+			tally[name].Count++
+			tally[name].Revenue += r.Price
+		}
+	}
+	for _, t := range tally {
+		vm.Plans = append(vm.Plans, *t)
+	}
+	sort.Slice(vm.Plans, func(i, j int) bool { return vm.Plans[i].Revenue > vm.Plans[j].Revenue })
+
+	vm.layout = layout{
+		Title:     "منهل — تقرير الاشتراكات",
+		Heading:   "📈 تقرير الاشتراكات",
+		Sub:       "نشاط البريميم والإيرادات (من الطلبات المُفعّلة)",
+		Active:    "subscriptions",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, subsReportTemplate, vm)
+}
+
 // ---------- subscription request queue ----------
 
 type requestRowVM struct {
@@ -1217,6 +1293,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
       <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
       <a href="/admin/requests" class="{{if eq .Active "requests"}}active{{end}}">💳 <span class="t">طلبات الاشتراك</span></a>
+      <a href="/admin/subscriptions" class="{{if eq .Active "subscriptions"}}active{{end}}">📈 <span class="t">تقرير الاشتراكات</span></a>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
@@ -1660,6 +1737,35 @@ var promotionTemplate = template.Must(template.New("promotion").Parse(layoutHead
 <form method="post" action="/admin/promotion/reset" onsubmit="return confirm('استعادة القواعد الافتراضية (تعليمات ١٠/٢٠٢٥)؟ سيُستبدل التعديل الحالي.');">
   <button class="btn-del" type="submit">↩️ استعادة الافتراضي</button>
 </form>
+` + layoutFoot))
+
+var subsReportTemplate = template.Must(template.New("subsreport").Parse(layoutHead + `
+<div class="stats">
+  <div class="stat accent"><div class="num">{{.RevenueMonth}}</div><div class="lbl">💰 إيراد هذا الشهر (د.ع)</div></div>
+  <div class="stat"><div class="num">{{.RevenueTotal}}</div><div class="lbl">💵 إجمالي الإيراد (د.ع)</div></div>
+  <div class="stat"><div class="num">{{.ActiveUsers}}</div><div class="lbl">💎 بريميم نشط</div></div>
+  <div class="stat {{if .ExpiredUsers}}warn{{end}}"><div class="num">{{.ExpiredUsers}}</div><div class="lbl">⏳ منتهية</div></div>
+</div>
+<div class="stats">
+  <div class="stat {{if .Pending}}warn{{end}}"><div class="num">{{.Pending}}</div><div class="lbl">🕓 طلبات معلّقة</div></div>
+  <div class="stat"><div class="num">{{.Approved}}</div><div class="lbl">✅ طلبات مُفعّلة</div></div>
+  <div class="stat"><div class="num">{{.Rejected}}</div><div class="lbl">❌ طلبات مرفوضة</div></div>
+</div>
+
+<div class="card">
+  <h3>📦 الإيراد حسب الباقة (من الطلبات المُفعّلة)</h3>
+  <ul class="list">
+    {{range .Plans}}
+    <li>
+      <span>{{.Name}} <span class="r-id">×{{.Count}}</span></span>
+      <span class="tag">{{.Revenue}} د.ع</span>
+    </li>
+    {{else}}
+    <li class="empty">لا اشتراكات مُفعّلة بعد.</li>
+    {{end}}
+  </ul>
+  <p style="color:#94a3b8;font-size:12px;margin-top:10px">يُحتسب الإيراد من طلبات الاشتراك التي فُعّلت عبر الطابور. التفعيل اليدوي أو أكواد الهدية لا تُحتسب هنا.</p>
+</div>
 ` + layoutFoot))
 
 var requestsTemplate = template.Must(template.New("requests").Parse(layoutHead + `

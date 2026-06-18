@@ -191,6 +191,7 @@ func main() {
 	go alerts.NewDeadlineReminder(announcements, st, st, app, cfg.ReminderDays, interval).Run(ctx)
 	go alerts.NewCitationWatcher(st, openAlex, app, interval).Run(ctx)
 	go alerts.NewPremiumExpiry(st, st, app, interval).Run(ctx)
+	go alerts.NewRenewalReminder(st, st, app, cfg.ReminderDays, interval).Run(ctx)
 	weekday := time.Weekday(((cfg.DigestWeekday % 7) + 7) % 7)
 	go alerts.NewWeeklyDigest(st, openAlex, announcements, app, weekday, interval).Run(ctx)
 

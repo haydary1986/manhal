@@ -235,6 +235,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/plans", s.auth(s.handlePlans))
 	mux.HandleFunc("/admin/plans/save", s.auth(s.handlePlanSave))
 	mux.HandleFunc("/admin/plans/delete", s.auth(s.handlePlanDelete))
+	mux.HandleFunc("/admin/subscriptions", s.auth(s.handleSubsReport))
 	mux.HandleFunc("/admin/requests", s.auth(s.handleRequests))
 	mux.HandleFunc("/admin/requests/approve", s.auth(s.handleRequestApprove))
 	mux.HandleFunc("/admin/requests/reject", s.auth(s.handleRequestReject))
@@ -862,6 +863,11 @@ func (s *Server) handlePlanDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/plans?msg="+urlencode("تم حذف الباقة"), http.StatusSeeOther)
+}
+
+// handleSubsReport renders the subscriptions & revenue report.
+func (s *Server) handleSubsReport(w http.ResponseWriter, r *http.Request) {
+	s.renderSubsReport(w, r.Context())
 }
 
 // handleRequests renders the subscription-request queue.
