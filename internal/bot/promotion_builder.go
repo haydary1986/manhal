@@ -96,6 +96,7 @@ func (a *App) promoMethodScreen(rank promotion.Rank) Screen {
 			"اختر طريقة الإدخال الأنسب لك:",
 		Keyboard: &Keyboard{Rows: [][]Button{
 			{{Text: "🔘 منشئ تفاعلي بالأزرار (موصى به)", Data: "promo:build:" + rank.Key}},
+			{{Text: "🤖 صِف إنجازاتك (ذكاء اصطناعي)", Data: "promo:ai:" + rank.Key}},
 			{{Text: "✍️ كتابة المؤشّرات نصّاً", Data: "promo:text:" + rank.Key}},
 			{{Text: "⬅️ رجوع", Data: "menu:promotion"}},
 		}},

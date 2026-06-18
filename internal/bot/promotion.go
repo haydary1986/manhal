@@ -63,6 +63,13 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 		}
 		a.sessions.startPromotion(userID, rank.Key)
 		a.send(ctx, userID, a.promotionInputScreen(rank))
+	case strings.HasPrefix(data, "ai:"):
+		rank, ok := a.promotion.FindRank(strings.TrimPrefix(data, "ai:"))
+		if !ok {
+			return
+		}
+		a.sessions.startPromotionAI(userID, rank.Key)
+		a.send(ctx, userID, promoAIPromptScreen(rank))
 	case strings.HasPrefix(data, "cat:"):
 		rank, ok := a.promotion.FindRank(a.sessions.promoteRank(userID))
 		if !ok {

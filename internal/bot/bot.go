@@ -250,6 +250,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 	case stateAwaitPromoCount:
 		a.handlePromoCount(ctx, msg)
 		return
+	case stateAwaitPromoAI:
+		a.handlePromotionAI(ctx, msg)
+		return
 	case stateAwaitPublish:
 		a.sessions.clear(msg.From.ID)
 		a.handlePublishAbstract(ctx, msg)

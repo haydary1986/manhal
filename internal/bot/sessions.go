@@ -23,6 +23,7 @@ const (
 	stateAwaitAIInput     sessionState = "await_ai_input"
 	stateAwaitPromotion   sessionState = "await_promotion"
 	stateAwaitPromoCount  sessionState = "await_promo_count"
+	stateAwaitPromoAI     sessionState = "await_promo_ai"
 	stateAwaitPublish     sessionState = "await_publish"
 	stateAwaitLitReview   sessionState = "await_litreview"
 	stateAwaitStats       sessionState = "await_stats"
@@ -199,6 +200,15 @@ func (s *sessions) startPromotion(userID int64, rankKey string) {
 	defer s.mu.Unlock()
 	e := s.entry(userID)
 	e.state = stateAwaitPromotion
+	e.promoteRank = rankKey
+}
+
+// startPromotionAI records the chosen rank and awaits a free-text description.
+func (s *sessions) startPromotionAI(userID int64, rankKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entry(userID)
+	e.state = stateAwaitPromoAI
 	e.promoteRank = rankKey
 }
 
