@@ -17,6 +17,7 @@ import (
 	"github.com/erticaz/manhal/internal/config"
 	"github.com/erticaz/manhal/internal/domain"
 	"github.com/erticaz/manhal/internal/menu"
+	"github.com/erticaz/manhal/internal/plans"
 	"github.com/erticaz/manhal/internal/predator"
 )
 
@@ -71,6 +72,14 @@ type PromotionEditor interface {
 	YAML() (string, error)
 	SetYAML(text string) error
 	ResetDefault() error
+}
+
+// PlansEditor is the editable subscription-plan catalogue (implemented by
+// plans.Manager). Plans drive the subscribe screen and one-click activation.
+type PlansEditor interface {
+	List() []plans.Plan
+	Upsert(p plans.Plan) error
+	Remove(id string) error
 }
 
 // Announcements is the editable announcements store (implemented by
@@ -148,7 +157,15 @@ type Server struct {
 	disciplines DisciplinesEditor
 	predators   PredatorEditor
 	promotion   PromotionEditor
+	plans       PlansEditor
 	accounts    map[string]string // username -> password
+}
+
+// WithPlans attaches the subscription-plan editor (set from main; tests that
+// don't exercise the plans page leave it nil).
+func (s *Server) WithPlans(p PlansEditor) *Server {
+	s.plans = p
+	return s
 }
 
 // WithEditors attaches optional reference-table editors (set from main; tests
@@ -198,6 +215,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/promotion", s.auth(s.handlePromotionEditor))
 	mux.HandleFunc("/admin/promotion/save", s.auth(s.handlePromotionSave))
 	mux.HandleFunc("/admin/promotion/reset", s.auth(s.handlePromotionReset))
+	mux.HandleFunc("/admin/plans", s.auth(s.handlePlans))
+	mux.HandleFunc("/admin/plans/save", s.auth(s.handlePlanSave))
+	mux.HandleFunc("/admin/plans/delete", s.auth(s.handlePlanDelete))
 	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
 	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
@@ -767,6 +787,60 @@ func (s *Server) handlePromotionReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/promotion?msg="+urlencode("تمت استعادة القواعد الافتراضية"), http.StatusSeeOther)
+}
+
+// handlePlans renders the subscription-plan catalogue editor.
+func (s *Server) handlePlans(w http.ResponseWriter, r *http.Request) {
+	s.renderPlans(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handlePlanSave upserts a plan (add when the id is new, update otherwise).
+func (s *Server) handlePlanSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.plans == nil {
+		http.Redirect(w, r, "/admin/plans?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	months, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("months")))
+	price, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("price")))
+	tier := domain.Tier(strings.TrimSpace(r.FormValue("tier")))
+	if !validTier(tier) || tier == domain.TierFree {
+		tier = domain.TierResearcher
+	}
+	p := plans.Plan{
+		ID:     strings.TrimSpace(r.FormValue("id")),
+		Name:   strings.TrimSpace(r.FormValue("name")),
+		Months: months,
+		Price:  price,
+		Tier:   tier,
+	}
+	if err := s.plans.Upsert(p); err != nil {
+		http.Redirect(w, r, "/admin/plans?err="+urlencode("تعذّر الحفظ (المعرّف والاسم مطلوبان)"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/plans?msg="+urlencode("تم حفظ الباقة"), http.StatusSeeOther)
+}
+
+// handlePlanDelete removes a plan by id.
+func (s *Server) handlePlanDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.plans == nil {
+		http.Redirect(w, r, "/admin/plans?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.plans.Remove(strings.TrimSpace(r.FormValue("id"))); err != nil {
+		http.Redirect(w, r, "/admin/plans?err="+urlencode("الباقة غير موجودة"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/plans?msg="+urlencode("تم حذف الباقة"), http.StatusSeeOther)
 }
 
 // handleGiftCodes renders the gift-code generator and list.

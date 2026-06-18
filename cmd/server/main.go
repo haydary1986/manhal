@@ -20,6 +20,7 @@ import (
 	"github.com/erticaz/manhal/internal/logbuf"
 	"github.com/erticaz/manhal/internal/menu"
 	"github.com/erticaz/manhal/internal/pexels"
+	"github.com/erticaz/manhal/internal/plans"
 	"github.com/erticaz/manhal/internal/predator"
 	"github.com/erticaz/manhal/internal/promotion"
 	"github.com/erticaz/manhal/internal/scholar"
@@ -80,6 +81,12 @@ func main() {
 	// edits it as validated YAML.
 	promotionMgr := promotion.NewManager(cfg.DataDir, promotionRules)
 
+	planList, err := plans.Load(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("plans: %v", err)
+	}
+	plansMgr := plans.NewManager(cfg.DataDir, planList)
+
 	// Storage: Postgres when DATABASE_URL is set, else in-memory for development.
 	var st store.Store
 	if cfg.DatabaseURL != "" {
@@ -131,6 +138,7 @@ func main() {
 		Journals:    journals,
 		Predators:   predators,
 		Promotion:   promotionMgr,
+		Plans:       plansMgr,
 		Announce:    announcements,
 		Disciplines: disciplinesMgr,
 		Menu:        menuMgr,
@@ -153,7 +161,8 @@ func main() {
 	accounts := cfg.WebAccounts()
 	if len(accounts) > 0 {
 		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements).
-			WithEditors(disciplinesMgr, predators, promotionMgr)
+			WithEditors(disciplinesMgr, predators, promotionMgr).
+			WithPlans(plansMgr)
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

@@ -159,7 +159,7 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 		a.sessions.set(cq.From.ID, stateAwaitRetractDOI)
 		a.send(ctx, cq.From.ID, retractPromptScreen())
 	case "subscribe":
-		a.send(ctx, cq.From.ID, subscribeScreen(a.settings.Get()))
+		a.send(ctx, cq.From.ID, subscribeScreen(a.settings.Get(), a.plans.List()))
 	case "support":
 		a.sessions.set(cq.From.ID, stateAwaitSupport)
 		a.send(ctx, cq.From.ID, supportPromptScreen())

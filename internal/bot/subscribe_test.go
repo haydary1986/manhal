@@ -13,7 +13,7 @@ func TestSubscribeScreen(t *testing.T) {
 		PaymentDetails: "زين كاش: 0770",
 		PaymentLink:    "https://zaincash.iq/pay",
 	}
-	scr := subscribeScreen(bs)
+	scr := subscribeScreen(bs, nil)
 
 	for _, want := range []string{"الباقة الشهرية 5000 دينار", "زين كاش: 0770", "طريقة الدفع"} {
 		if !strings.Contains(scr.Text, want) {
@@ -40,7 +40,7 @@ func TestSubscribeScreen(t *testing.T) {
 	}
 
 	// Without a link there is no pay button, but the request button stays.
-	scr2 := subscribeScreen(config.BotSettings{})
+	scr2 := subscribeScreen(config.BotSettings{}, nil)
 	for _, row := range scr2.Keyboard.Rows {
 		for _, b := range row {
 			if b.URL != "" {

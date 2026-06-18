@@ -13,6 +13,7 @@ import (
 	"github.com/erticaz/manhal/internal/embed"
 	"github.com/erticaz/manhal/internal/journal"
 	"github.com/erticaz/manhal/internal/menu"
+	"github.com/erticaz/manhal/internal/plans"
 	"github.com/erticaz/manhal/internal/predator"
 	"github.com/erticaz/manhal/internal/promotion"
 	"github.com/erticaz/manhal/internal/store"
@@ -36,6 +37,7 @@ type Deps struct {
 	Journals    *journal.Index
 	Predators   *predator.List
 	Promotion   *promotion.Manager
+	Plans       *plans.Manager
 	Announce    *announce.Repo
 	Disciplines *config.DisciplinesManager
 	Menu        *menu.Manager
@@ -61,6 +63,7 @@ type App struct {
 	journals     *journal.Index
 	predators    *predator.List
 	promotion    *promotion.Manager
+	plans        *plans.Manager
 	announce     *announce.Repo
 	disciplines  *config.DisciplinesManager
 	menu         *menu.Manager
@@ -88,6 +91,7 @@ func New(d Deps) (*App, error) {
 		journals:     d.Journals,
 		predators:    d.Predators,
 		promotion:    d.Promotion,
+		plans:        d.Plans,
 		announce:     d.Announce,
 		disciplines:  d.Disciplines,
 		menu:         d.Menu,

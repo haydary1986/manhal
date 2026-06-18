@@ -594,6 +594,48 @@ func (s *Server) renderPromotion(w http.ResponseWriter, ctx context.Context, msg
 	writeHTML(w, promotionTemplate, vm)
 }
 
+// ---------- subscription plans editor ----------
+
+type planRowVM struct {
+	ID       string
+	Name     string
+	Months   int
+	Price    int
+	Tier     string
+	Duration string
+}
+
+type plansVM struct {
+	layout
+	Items    []planRowVM
+	Msg, Err string
+}
+
+// renderPlans renders the subscription-plan catalogue editor.
+func (s *Server) renderPlans(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := plansVM{Msg: msg, Err: errMsg}
+	if s.plans != nil {
+		for _, p := range s.plans.List() {
+			vm.Items = append(vm.Items, planRowVM{
+				ID:       p.ID,
+				Name:     p.Name,
+				Months:   p.Months,
+				Price:    p.Price,
+				Tier:     string(p.Tier),
+				Duration: p.DurationLabel(),
+			})
+		}
+	}
+	vm.layout = layout{
+		Title:     "منهل — الباقات",
+		Heading:   "📦 باقات الاشتراك",
+		Sub:       "أسعار ومدد الاشتراك المميّز — تظهر للمستخدم وتُستخدم في التفعيل بنقرة",
+		Active:    "plans",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, plansTemplate, vm)
+}
+
 // ---------- gift codes ----------
 
 type giftRowVM struct {
@@ -1082,6 +1124,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
+      <a href="/admin/plans" class="{{if eq .Active "plans"}}active{{end}}">📦 <span class="t">باقات الاشتراك</span></a>
       <a href="/admin/disciplines" class="{{if eq .Active "disciplines"}}active{{end}}">🏷️ <span class="t">التخصصات</span></a>
       <a href="/admin/predatory" class="{{if eq .Active "predatory"}}active{{end}}">🚩 <span class="t">القائمة المفترسة</span></a>
       <a href="/admin/promotion" class="{{if eq .Active "promotion"}}active{{end}}">🎓 <span class="t">قواعد الترقية</span></a>
@@ -1521,6 +1564,71 @@ var promotionTemplate = template.Must(template.New("promotion").Parse(layoutHead
 <form method="post" action="/admin/promotion/reset" onsubmit="return confirm('استعادة القواعد الافتراضية (تعليمات ١٠/٢٠٢٥)؟ سيُستبدل التعديل الحالي.');">
   <button class="btn-del" type="submit">↩️ استعادة الافتراضي</button>
 </form>
+` + layoutFoot))
+
+var plansTemplate = template.Must(template.New("plans").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="card">
+  <h3>➕ إضافة / تعديل باقة</h3>
+  <p style="color:#64748b;font-size:13px;margin:0 0 12px">المعرّف مفتاح ثابت (إنجليزي قصير). كتابة معرّف موجود يُحدّث الباقة. المدّة بالأشهر (0 = دائم).</p>
+  <form method="post" action="/admin/plans/save">
+    <div class="grid2">
+      <div><label>المعرّف</label><input name="id" placeholder="monthly" required></div>
+      <div><label>الاسم المعروض</label><input name="name" placeholder="شهري" required></div>
+      <div><label>المدّة (أشهر، 0 = دائم)</label><input name="months" type="number" min="0" value="1"></div>
+      <div><label>السعر (دينار)</label><input name="price" type="number" min="0" value="5000"></div>
+      <div>
+        <label>الباقة</label>
+        <select name="tier">
+          <option value="researcher">باحث</option>
+          <option value="student">طالب</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn block" type="submit">💾 حفظ الباقة</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>📋 الباقات الحالية</h3>
+  {{range .Items}}
+  <details class="urow">
+    <summary>
+      <span><span class="r-name">{{.Name}}</span> <span class="r-id">{{.ID}}</span></span>
+      <span class="usp"></span>
+      <span class="r-count">{{.Price}} د.ع / {{.Duration}}</span>
+    </summary>
+    <div class="udetail">
+      <form method="post" action="/admin/plans/save" class="ucard">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <label>تعديل «{{.Name}}»</label>
+        <div class="grid2">
+          <div><label>الاسم</label><input name="name" value="{{.Name}}" required></div>
+          <div><label>المدّة (أشهر)</label><input name="months" type="number" min="0" value="{{.Months}}"></div>
+          <div><label>السعر</label><input name="price" type="number" min="0" value="{{.Price}}"></div>
+          <div>
+            <label>الباقة</label>
+            <select name="tier">
+              <option value="researcher" {{if eq .Tier "researcher"}}selected{{end}}>باحث</option>
+              <option value="student" {{if eq .Tier "student"}}selected{{end}}>طالب</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" type="submit">تحديث</button>
+      </form>
+      <form method="post" action="/admin/plans/delete" class="ucard" onsubmit="return confirm('حذف هذه الباقة؟');">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <label>حذف الباقة</label>
+        <button class="btn-del" type="submit">حذف «{{.Name}}»</button>
+      </form>
+    </div>
+  </details>
+  {{else}}
+  <div class="empty">لا باقات بعد — أضِف باقة من الأعلى.</div>
+  {{end}}
+</div>
 ` + layoutFoot))
 
 var giftTemplate = template.Must(template.New("gift").Parse(layoutHead + `

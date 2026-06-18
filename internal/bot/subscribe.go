@@ -9,6 +9,7 @@ import (
 
 	"github.com/erticaz/manhal/internal/config"
 	"github.com/erticaz/manhal/internal/domain"
+	"github.com/erticaz/manhal/internal/plans"
 	"github.com/erticaz/manhal/internal/store"
 	tg "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -23,6 +24,15 @@ func premiumBenefits() []string {
 		"إعادة الكتابة البشرية لملفات Word كاملة (لا النص فقط)",
 		"أولوية في الدعم الفني",
 	}
+}
+
+// plansList renders the plan catalogue as bullet lines with price + duration.
+func plansList(pl []plans.Plan) string {
+	var b strings.Builder
+	for _, p := range pl {
+		b.WriteString("• " + p.Name + " — " + strconv.Itoa(p.Price) + " د.ع / " + p.DurationLabel() + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // benefitsList renders the benefits as bullet lines.
@@ -52,8 +62,11 @@ func premiumGateScreen(reason string) Screen {
 
 // subscribeScreen shows the premium benefits and plans plus the manual payment
 // details the admin configured, with a button to register a paid request.
-func subscribeScreen(bs config.BotSettings) Screen {
+func subscribeScreen(bs config.BotSettings, pl []plans.Plan) Screen {
 	text := "💎 الاشتراك المميّز في منهل\n\n✨ ماذا تكسب:\n" + benefitsList()
+	if len(pl) > 0 {
+		text += "\n\n📦 الباقات المتاحة:\n" + plansList(pl)
+	}
 	if info := strings.TrimSpace(bs.PremiumInfo); info != "" {
 		text += "\n\n" + info
 	}
