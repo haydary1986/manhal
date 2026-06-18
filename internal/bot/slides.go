@@ -74,7 +74,9 @@ func (a *App) handleSlidesDoc(ctx context.Context, msg *models.Message) {
 		text, err = docx.ExtractText(data)
 	}
 	if err != nil {
-		a.logf("slides extract (%s): %v", doc.FileName, err)
+		a.logf("slides extract (%s, %d bytes): %v", doc.FileName, len(data), err)
+	} else if strings.TrimSpace(text) == "" {
+		a.logf("slides extract (%s, %d bytes): parsed empty", doc.FileName, len(data))
 	}
 	if strings.TrimSpace(text) == "" {
 		a.send(ctx, chatID, Screen{

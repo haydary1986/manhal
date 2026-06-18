@@ -25,11 +25,21 @@ func ExtractText(data []byte) (string, error) {
 		return "", fmt.Errorf("docx: open zip: %w", err)
 	}
 
-	var doc *zip.File
-	for _, f := range zr.File {
-		if f.Name == "word/document.xml" {
-			doc = f
-			break
+	// Resolve the main document part via the package relationships rather than
+	// assuming "word/document.xml" (some producers use a different name).
+	part := mainDocumentPart(zr)
+	doc := findFile(zr, part)
+	if doc == nil {
+		doc = findFile(zr, "word/document.xml") // fallback
+	}
+	if doc == nil {
+		// Last resort: any word/document*.xml.
+		for _, f := range zr.File {
+			n := strings.ToLower(f.Name)
+			if strings.HasPrefix(n, "word/document") && strings.HasSuffix(n, ".xml") {
+				doc = f
+				break
+			}
 		}
 	}
 	if doc == nil {
@@ -38,17 +48,57 @@ func ExtractText(data []byte) (string, error) {
 
 	rc, err := doc.Open()
 	if err != nil {
-		return "", fmt.Errorf("docx: open document.xml: %w", err)
+		return "", fmt.Errorf("docx: open %s: %w", doc.Name, err)
 	}
 	defer rc.Close()
 
 	return parseBody(io.LimitReader(rc, maxXMLBytes))
 }
 
+// mainDocumentPart reads _rels/.rels and returns the officeDocument target part
+// name (without a leading slash), defaulting to word/document.xml.
+func mainDocumentPart(zr *zip.Reader) string {
+	rels := findFile(zr, "_rels/.rels")
+	if rels == nil {
+		return "word/document.xml"
+	}
+	rc, err := rels.Open()
+	if err != nil {
+		return "word/document.xml"
+	}
+	defer rc.Close()
+	var doc struct {
+		Rel []struct {
+			Type   string `xml:"Type,attr"`
+			Target string `xml:"Target,attr"`
+		} `xml:"Relationship"`
+	}
+	if err := xml.NewDecoder(io.LimitReader(rc, 1<<20)).Decode(&doc); err != nil {
+		return "word/document.xml"
+	}
+	for _, r := range doc.Rel {
+		if strings.HasSuffix(r.Type, "/officeDocument") {
+			return strings.TrimPrefix(r.Target, "/")
+		}
+	}
+	return "word/document.xml"
+}
+
+func findFile(zr *zip.Reader, name string) *zip.File {
+	for _, f := range zr.File {
+		if f.Name == name {
+			return f
+		}
+	}
+	return nil
+}
+
 // parseBody streams the WordprocessingML, collecting <w:t> text and breaking
 // lines at </w:p> (paragraph) boundaries.
 func parseBody(r io.Reader) (string, error) {
 	dec := xml.NewDecoder(r)
+	dec.Strict = false // tolerate quirks some producers emit
+	dec.CharsetReader = func(_ string, in io.Reader) (io.Reader, error) { return in, nil }
 	var b strings.Builder
 	inText := false
 
