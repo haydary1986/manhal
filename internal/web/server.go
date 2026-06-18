@@ -64,6 +64,15 @@ type PredatorEditor interface {
 	Remove(pattern string) error
 }
 
+// PromotionEditor is the editable promotion rule set (implemented by
+// promotion.Manager). Rules are edited as a validated YAML document so the admin
+// can track ministry amendments without a code change.
+type PromotionEditor interface {
+	YAML() (string, error)
+	SetYAML(text string) error
+	ResetDefault() error
+}
+
 // Announcements is the editable announcements store (implemented by
 // announce.Repo): the bot reads it, the admin web publishes/removes items.
 type Announcements interface {
@@ -138,14 +147,16 @@ type Server struct {
 	announce    Announcements
 	disciplines DisciplinesEditor
 	predators   PredatorEditor
+	promotion   PromotionEditor
 	accounts    map[string]string // username -> password
 }
 
 // WithEditors attaches optional reference-table editors (set from main; tests
 // that don't exercise these pages leave them nil).
-func (s *Server) WithEditors(disciplines DisciplinesEditor, predators PredatorEditor) *Server {
+func (s *Server) WithEditors(disciplines DisciplinesEditor, predators PredatorEditor, promotion PromotionEditor) *Server {
 	s.disciplines = disciplines
 	s.predators = predators
+	s.promotion = promotion
 	return s
 }
 
@@ -184,6 +195,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/predatory", s.auth(s.handlePredatory))
 	mux.HandleFunc("/admin/predatory/add", s.auth(s.handlePredatoryAdd))
 	mux.HandleFunc("/admin/predatory/delete", s.auth(s.handlePredatoryDelete))
+	mux.HandleFunc("/admin/promotion", s.auth(s.handlePromotionEditor))
+	mux.HandleFunc("/admin/promotion/save", s.auth(s.handlePromotionSave))
+	mux.HandleFunc("/admin/promotion/reset", s.auth(s.handlePromotionReset))
 	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
 	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
@@ -684,6 +698,47 @@ func (s *Server) handlePredatoryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/predatory?msg="+urlencode("تم حذف النمط"), http.StatusSeeOther)
+}
+
+// handlePromotionEditor renders the promotion rules (YAML) editor.
+func (s *Server) handlePromotionEditor(w http.ResponseWriter, r *http.Request) {
+	s.renderPromotion(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handlePromotionSave validates and persists an edited rule set. Invalid YAML is
+// rejected with the parser's message; the live rules stay intact.
+func (s *Server) handlePromotionSave(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.promotion == nil {
+		http.Redirect(w, r, "/admin/promotion?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	if err := s.promotion.SetYAML(r.FormValue("rules")); err != nil {
+		http.Redirect(w, r, "/admin/promotion?err="+urlencode("خطأ في القواعد: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/promotion?msg="+urlencode("تم حفظ قواعد الترقية وتطبيقها فوراً"), http.StatusSeeOther)
+}
+
+// handlePromotionReset restores the ministry defaults.
+func (s *Server) handlePromotionReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.promotion == nil {
+		http.Redirect(w, r, "/admin/promotion?err="+urlencode("غير متاح"), http.StatusSeeOther)
+		return
+	}
+	if err := s.promotion.ResetDefault(); err != nil {
+		http.Redirect(w, r, "/admin/promotion?err="+urlencode("تعذّرت الاستعادة"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/promotion?msg="+urlencode("تمت استعادة القواعد الافتراضية"), http.StatusSeeOther)
 }
 
 // handleGiftCodes renders the gift-code generator and list.

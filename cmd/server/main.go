@@ -76,6 +76,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("promotion: %v", err)
 	}
+	// Shared, persisted rules: the bot computes against the live ruleset; the web
+	// edits it as validated YAML.
+	promotionMgr := promotion.NewManager(cfg.DataDir, promotionRules)
 
 	// Storage: Postgres when DATABASE_URL is set, else in-memory for development.
 	var st store.Store
@@ -127,7 +130,7 @@ func main() {
 		OA:          scholar.NewUnpaywall(cfg.UnpaywallEmail),
 		Journals:    journals,
 		Predators:   predators,
-		Promotion:   promotionRules,
+		Promotion:   promotionMgr,
 		Announce:    announcements,
 		Disciplines: disciplinesMgr,
 		Menu:        menuMgr,
@@ -150,7 +153,7 @@ func main() {
 	accounts := cfg.WebAccounts()
 	if len(accounts) > 0 {
 		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements).
-			WithEditors(disciplinesMgr, predators)
+			WithEditors(disciplinesMgr, predators, promotionMgr)
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

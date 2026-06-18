@@ -9,7 +9,7 @@ import (
 
 func promoApp() *App {
 	return &App{
-		promotion: promotion.DefaultRules(),
+		promotion: promotion.NewManager("", promotion.DefaultRules()),
 		sessions:  newSessions(),
 	}
 }

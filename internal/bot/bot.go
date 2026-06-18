@@ -35,7 +35,7 @@ type Deps struct {
 	OA          OAFinder
 	Journals    *journal.Index
 	Predators   *predator.List
-	Promotion   *promotion.Rules
+	Promotion   *promotion.Manager
 	Announce    *announce.Repo
 	Disciplines *config.DisciplinesManager
 	Menu        *menu.Manager
@@ -60,7 +60,7 @@ type App struct {
 	oa           OAFinder
 	journals     *journal.Index
 	predators    *predator.List
-	promotion    *promotion.Rules
+	promotion    *promotion.Manager
 	announce     *announce.Repo
 	disciplines  *config.DisciplinesManager
 	menu         *menu.Manager

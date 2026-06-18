@@ -537,6 +537,34 @@ func (s *Server) renderPredatory(w http.ResponseWriter, ctx context.Context, msg
 	writeHTML(w, predatoryTemplate, vm)
 }
 
+// ---------- promotion rules editor ----------
+
+type promotionVM struct {
+	layout
+	YAML     string
+	Msg, Err string
+}
+
+// renderPromotion renders the promotion-rules (YAML) editor.
+func (s *Server) renderPromotion(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := promotionVM{Msg: msg, Err: errMsg}
+	if s.promotion != nil {
+		if y, err := s.promotion.YAML(); err == nil {
+			vm.YAML = y
+		} else {
+			vm.Err = "تعذّر قراءة القواعد الحالية"
+		}
+	}
+	vm.layout = layout{
+		Title:     "منهل — قواعد الترقية",
+		Heading:   "🎓 قواعد الترقية",
+		Sub:       "نقاط الجدولين ١ و٢ وعتبات الرتب — تُطبَّق على الحاسبة فوراً",
+		Active:    "promotion",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, promotionTemplate, vm)
+}
+
 // ---------- gift codes ----------
 
 type giftRowVM struct {
@@ -1027,6 +1055,7 @@ const layoutHead = `<!doctype html>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
       <a href="/admin/disciplines" class="{{if eq .Active "disciplines"}}active{{end}}">🏷️ <span class="t">التخصصات</span></a>
       <a href="/admin/predatory" class="{{if eq .Active "predatory"}}active{{end}}">🚩 <span class="t">القائمة المفترسة</span></a>
+      <a href="/admin/promotion" class="{{if eq .Active "promotion"}}active{{end}}">🎓 <span class="t">قواعد الترقية</span></a>
       <a href="/admin/menu" class="{{if eq .Active "menu"}}active{{end}}">🔘 <span class="t">إدارة الأزرار</span></a>
       <a href="/admin/support" class="{{if eq .Active "support"}}active{{end}}">📨 <span class="t">الدعم الفني</span>{{if .OpenBadge}}<span class="pill">{{.OpenBadge}}</span>{{end}}</a>
       <a href="/admin/settings" class="{{if eq .Active "settings"}}active{{end}}">⚙️ <span class="t">الإعدادات</span></a>
@@ -1406,6 +1435,36 @@ var disciplinesTemplate = template.Must(template.New("disciplines").Parse(layout
     </ul>
   </div>
 </div>
+` + layoutFoot))
+
+var promotionTemplate = template.Must(template.New("promotion").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="card">
+  <h3>📖 طريقة التعديل</h3>
+  <p class="muted" style="line-height:1.9">
+    تتحكّم هذه القواعد بحاسبة نقاط الترقية داخل البوت. عدِّل القيم ثم اضغط «حفظ» لتُطبَّق فوراً.
+    <br>• <b>ranks</b>: الرتب وعتباتها — <code>required_total</code> المجموع المطلوب،
+    <code>required_table1/2</code> حدّا الجدولين، <code>min_service_years</code> سنوات الخدمة.
+    <br>• <b>activities</b>: البنود — <code>table</code> إمّا 1 (بحوث) أو 2 (نشاطات)،
+    <code>points</code> نقاط لكل رتبة (أو <code>"*"</code> لكل الرتب)، <code>cap</code> السقف (0 = بلا سقف).
+    <br>⚠️ أي خطأ في الصياغة يُرفَض ولا يؤثّر على القواعد المُطبَّقة، فجرّب بثقة.
+  </p>
+</div>
+
+<form method="post" action="/admin/promotion/save">
+  <div class="card">
+    <h3>✏️ قواعد الترقية (YAML)</h3>
+    <textarea name="rules" dir="ltr" spellcheck="false"
+      style="width:100%;min-height:460px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.6;white-space:pre;direction:ltr;text-align:left">{{.YAML}}</textarea>
+    <button class="btn block" type="submit">💾 حفظ وتطبيق</button>
+  </div>
+</form>
+
+<form method="post" action="/admin/promotion/reset" onsubmit="return confirm('استعادة القواعد الافتراضية (تعليمات ١٠/٢٠٢٥)؟ سيُستبدل التعديل الحالي.');">
+  <button class="btn-del" type="submit">↩️ استعادة الافتراضي</button>
+</form>
 ` + layoutFoot))
 
 var giftTemplate = template.Must(template.New("gift").Parse(layoutHead + `

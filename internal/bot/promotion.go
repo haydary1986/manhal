@@ -13,7 +13,7 @@ import (
 // promotionRankScreen asks the user to pick their current rank.
 func (a *App) promotionRankScreen() Screen {
 	rows := [][]Button{}
-	for _, rk := range a.promotion.Ranks {
+	for _, rk := range a.promotion.Ranks() {
 		rows = append(rows, []Button{{Text: rk.Label + " ← " + rk.NextLabel, Data: "promo:rank:" + rk.Key}})
 	}
 	rows = append(rows, []Button{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}})
