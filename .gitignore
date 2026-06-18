@@ -20,3 +20,7 @@ vendor/
 
 # previews / scratch
 preview-*.html
+
+# Source spreadsheets (transcribed into code)
+*.xlsx
+*.xls

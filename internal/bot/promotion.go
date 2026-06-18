@@ -16,11 +16,14 @@ func (a *App) promotionRankScreen() Screen {
 	for _, rk := range a.promotion.Ranks() {
 		rows = append(rows, []Button{{Text: rk.Label + " ← " + rk.NextLabel, Data: "promo:rank:" + rk.Key}})
 	}
-	rows = append(rows, []Button{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}})
+	rows = append(rows,
+		[]Button{{Text: "📊 الجدول الأول (البحوث)", Data: "promo:table1"}, {Text: "📋 الجدول الثاني (النشاطات)", Data: "promo:table2"}},
+		[]Button{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}},
+	)
 	return Screen{
 		Text: "🎓 حاسبة نقاط الترقية العلمية\n" +
-			"(تعليمات رقم ١٠ لسنة ٢٠٢٥)\n\n" +
-			"اختر رتبتك الحالية:",
+			"(تعليمات الترقيات العلمية 2025-2026)\n\n" +
+			"📊 اطّلع على الجدولين الرسميين، أو اختر رتبتك الحالية لحساب نقاطك:",
 		Keyboard: &Keyboard{Rows: rows},
 	}
 }
@@ -41,6 +44,10 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 	data := strings.TrimPrefix(cq.Data, "promo:")
 
 	switch {
+	case data == "table1":
+		a.send(ctx, userID, promotionTable1Screen())
+	case data == "table2":
+		a.send(ctx, userID, promotionTable2Screen())
 	case strings.HasPrefix(data, "rank:"):
 		rank, ok := a.promotion.FindRank(strings.TrimPrefix(data, "rank:"))
 		if !ok {
