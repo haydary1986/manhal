@@ -163,6 +163,9 @@ func main() {
 		webSrv := web.NewServer(menuMgr, st, notifier, accounts, settingsMgr, announcements).
 			WithEditors(disciplinesMgr, predators, promotionMgr).
 			WithPlans(plansMgr)
+		if err == nil {
+			webSrv.WithProofImages(app) // preview payment receipts in the queue
+		}
 		go func() {
 			log.Printf("admin web listening on %s (%d admin account(s))", cfg.WebAddr, len(accounts))
 			if rerr := webSrv.Run(ctx, cfg.WebAddr); rerr != nil {

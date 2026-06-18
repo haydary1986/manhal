@@ -44,6 +44,7 @@ const (
 	stateAwaitSemantic    sessionState = "await_semantic"
 	stateAwaitPdfFile     sessionState = "await_pdf_file"
 	statePdfChat          sessionState = "pdf_chat"
+	stateAwaitPayProof    sessionState = "await_pay_proof"
 )
 
 // session holds one user's conversational context: the wizard state plus the
@@ -59,6 +60,7 @@ type session struct {
 	promoDraft   map[string]float64 // accumulated counts in the interactive builder
 	promoPending string             // activity key awaiting a count in the builder
 	statsTest    string             // chosen statistical test while awaiting data
+	payPlanID    string             // chosen subscription plan while awaiting payment proof
 	lastWork     *cite.Work         // most recent fetched citation, for "save to library"
 	lastAuthor   *scholar.Author    // most recent viewed author profile, for citation-watch
 	pdfChunks    []pdfChunk         // embedded chunks of the active PDF (RAG, #24)
@@ -201,6 +203,25 @@ func (s *sessions) startPromotion(userID int64, rankKey string) {
 	e := s.entry(userID)
 	e.state = stateAwaitPromotion
 	e.promoteRank = rankKey
+}
+
+// startPayProof records the chosen plan and awaits the user's payment proof.
+func (s *sessions) startPayProof(userID int64, planID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entry(userID)
+	e.state = stateAwaitPayProof
+	e.payPlanID = planID
+}
+
+// payPlanID returns the plan chosen for the pending payment proof.
+func (s *sessions) payPlan(userID int64) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.m[userID]; e != nil {
+		return e.payPlanID
+	}
+	return ""
 }
 
 // startPromotionAI records the chosen rank and awaits a free-text description.

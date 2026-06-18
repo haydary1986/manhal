@@ -594,6 +594,101 @@ func (s *Server) renderPromotion(w http.ResponseWriter, ctx context.Context, msg
 	writeHTML(w, promotionTemplate, vm)
 }
 
+// ---------- subscription request queue ----------
+
+type requestRowVM struct {
+	ID       string
+	UserName string
+	UserID   string
+	PlanName string
+	Price    int
+	Duration string
+	Proof    string
+	HasPhoto bool
+	StatusAr string
+	When     string
+	Note     string
+}
+
+type requestsVM struct {
+	layout
+	Pending       []requestRowVM
+	Recent        []requestRowVM
+	PendingN      int
+	ProofViewable bool
+	Msg, Err      string
+}
+
+func monthsLabel(months int) string {
+	switch {
+	case months <= 0:
+		return "دائم"
+	case months == 1:
+		return "شهر"
+	case months == 12:
+		return "سنة"
+	default:
+		return strconv.Itoa(months) + " أشهر"
+	}
+}
+
+func subReqStatusAr(s domain.SubReqStatus) string {
+	switch s {
+	case domain.SubReqApproved:
+		return "✅ مُفعّل"
+	case domain.SubReqRejected:
+		return "❌ مرفوض"
+	default:
+		return "🕓 قيد المراجعة"
+	}
+}
+
+func toRequestRow(r domain.SubscriptionRequest) requestRowVM {
+	return requestRowVM{
+		ID:       r.ID,
+		UserName: nameOr(r.UserName),
+		UserID:   strconv.FormatInt(r.UserID, 10),
+		PlanName: r.PlanName,
+		Price:    r.Price,
+		Duration: monthsLabel(r.Months),
+		Proof:    r.Proof,
+		HasPhoto: r.ProofFileID != "",
+		StatusAr: subReqStatusAr(r.Status),
+		When:     r.CreatedAt.Format("2006-01-02 15:04"),
+		Note:     r.Note,
+	}
+}
+
+// renderRequests renders the pending queue plus recent decisions.
+func (s *Server) renderRequests(w http.ResponseWriter, ctx context.Context, msg, errMsg string) {
+	vm := requestsVM{Msg: msg, Err: errMsg, ProofViewable: s.proofImages != nil}
+	pending, _ := s.data.ListSubscriptionRequests(ctx, domain.SubReqPending)
+	for _, r := range pending {
+		vm.Pending = append(vm.Pending, toRequestRow(r))
+	}
+	vm.PendingN = len(vm.Pending)
+
+	all, _ := s.data.ListSubscriptionRequests(ctx, "")
+	for _, r := range all {
+		if r.Status == domain.SubReqPending {
+			continue
+		}
+		vm.Recent = append(vm.Recent, toRequestRow(r))
+		if len(vm.Recent) == 25 {
+			break
+		}
+	}
+
+	vm.layout = layout{
+		Title:     "منهل — طلبات الاشتراك",
+		Heading:   "💳 طلبات الاشتراك",
+		Sub:       "من دفع وينتظر التفعيل — راجع الإثبات وفعّل بنقرة",
+		Active:    "requests",
+		OpenBadge: s.openBadge(ctx),
+	}
+	writeHTML(w, requestsTemplate, vm)
+}
+
 // ---------- subscription plans editor ----------
 
 type planRowVM struct {
@@ -1121,6 +1216,7 @@ const layoutHead = `<!doctype html>
     <nav class="nav">
       <a href="/admin" class="{{if eq .Active "dashboard"}}active{{end}}">📊 <span class="t">لوحة التحكم</span></a>
       <a href="/admin/users" class="{{if eq .Active "users"}}active{{end}}">👥 <span class="t">المستخدمون</span></a>
+      <a href="/admin/requests" class="{{if eq .Active "requests"}}active{{end}}">💳 <span class="t">طلبات الاشتراك</span></a>
       <a href="/admin/announcements" class="{{if eq .Active "announce"}}active{{end}}">📢 <span class="t">الإعلانات</span></a>
       <a href="/admin/broadcast" class="{{if eq .Active "broadcast"}}active{{end}}">📣 <span class="t">البث الجماعي</span></a>
       <a href="/admin/giftcodes" class="{{if eq .Active "gift"}}active{{end}}">🎁 <span class="t">أكواد الهدية</span></a>
@@ -1564,6 +1660,54 @@ var promotionTemplate = template.Must(template.New("promotion").Parse(layoutHead
 <form method="post" action="/admin/promotion/reset" onsubmit="return confirm('استعادة القواعد الافتراضية (تعليمات ١٠/٢٠٢٥)؟ سيُستبدل التعديل الحالي.');">
   <button class="btn-del" type="submit">↩️ استعادة الافتراضي</button>
 </form>
+` + layoutFoot))
+
+var requestsTemplate = template.Must(template.New("requests").Parse(layoutHead + `
+{{if .Msg}}<div class="flash ok">✅ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="flash bad">❌ {{.Err}}</div>{{end}}
+
+<div class="stats">
+  <div class="stat {{if .PendingN}}warn{{end}}"><div class="num">{{.PendingN}}</div><div class="lbl">🕓 طلبات بانتظار التفعيل</div></div>
+</div>
+
+<div class="card">
+  <h3>🕓 بانتظار المراجعة</h3>
+  {{range .Pending}}
+  <div class="ucard" style="margin-bottom:14px">
+    <div style="font-weight:700;font-size:15px">{{.UserName}} <span class="r-id">#{{.UserID}}</span></div>
+    <div style="margin:6px 0;color:#334155">📦 {{.PlanName}} — {{.Price}} د.ع / {{.Duration}} · 🕓 {{.When}}</div>
+    {{if .Proof}}<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin:6px 0;white-space:pre-wrap">🧾 {{.Proof}}</div>{{end}}
+    {{if and .HasPhoto $.ProofViewable}}<a href="/admin/requests/proof?id={{.ID}}" target="_blank"><img src="/admin/requests/proof?id={{.ID}}" alt="إثبات الدفع" style="max-width:240px;border-radius:8px;border:1px solid #e2e8f0;margin:6px 0"></a>{{else if .HasPhoto}}<div style="color:#94a3b8;font-size:12px">📎 صورة إثبات مرفقة (افتح البوت لعرضها)</div>{{end}}
+    <div class="grid2" style="margin-top:8px">
+      <form method="post" action="/admin/requests/approve" onsubmit="return confirm('تفعيل اشتراك {{.UserName}} لباقة {{.PlanName}}؟');">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn block" type="submit">✅ تفعيل بنقرة</button>
+      </form>
+      <form method="post" action="/admin/requests/reject">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <input name="note" placeholder="سبب الرفض (اختياري)">
+        <button class="btn-del" type="submit" style="margin-top:6px">❌ رفض</button>
+      </form>
+    </div>
+  </div>
+  {{else}}
+  <div class="empty">لا طلبات بانتظار المراجعة. 🎉</div>
+  {{end}}
+</div>
+
+{{if .Recent}}
+<div class="card">
+  <h3>📜 قرارات سابقة</h3>
+  <ul class="list">
+    {{range .Recent}}
+    <li>
+      <span>{{.UserName}} <span class="r-id">#{{.UserID}}</span> · {{.PlanName}} · {{.When}}{{if .Note}} — {{.Note}}{{end}}</span>
+      <span class="tag">{{.StatusAr}}</span>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
 ` + layoutFoot))
 
 var plansTemplate = template.Must(template.New("plans").Parse(layoutHead + `

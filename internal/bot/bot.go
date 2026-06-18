@@ -214,7 +214,16 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	}
 
+	// A photo while awaiting payment proof is a receipt screenshot.
+	if len(msg.Photo) > 0 && a.sessions.get(msg.From.ID) == stateAwaitPayProof {
+		a.handlePayProof(ctx, msg)
+		return
+	}
+
 	switch a.sessions.get(msg.From.ID) {
+	case stateAwaitPayProof:
+		a.handlePayProof(ctx, msg)
+		return
 	case stateAwaitLatexFile:
 		a.send(ctx, msg.Chat.ID, Screen{Text: "أرسل ملفاً ‎.tex‎ أو ‎.docx‎ (وليس نصاً).", Keyboard: latexNav()})
 		return

@@ -62,6 +62,16 @@ type Store interface {
 	// Returns ErrNotFound if absent, ErrCodeUsed if already claimed.
 	RedeemGiftCode(ctx context.Context, code string, userID int64) (domain.GiftCode, error)
 
+	// AddSubscriptionRequest stores a new paid-subscription request (pending).
+	AddSubscriptionRequest(ctx context.Context, r domain.SubscriptionRequest) error
+	// ListSubscriptionRequests returns requests filtered by status (empty status
+	// returns all), pending first then newest.
+	ListSubscriptionRequests(ctx context.Context, status domain.SubReqStatus) ([]domain.SubscriptionRequest, error)
+	// GetSubscriptionRequest returns a request by id; ErrNotFound if absent.
+	GetSubscriptionRequest(ctx context.Context, id string) (*domain.SubscriptionRequest, error)
+	// UpdateSubscriptionRequest persists changes to an existing request.
+	UpdateSubscriptionRequest(ctx context.Context, r domain.SubscriptionRequest) error
+
 	// RecordUsage increments the usage counter for (user, action). Best-effort
 	// analytics: callers ignore the error so tracking never breaks a feature.
 	RecordUsage(ctx context.Context, userID int64, action string) error

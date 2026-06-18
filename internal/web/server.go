@@ -34,6 +34,9 @@ type Data interface {
 	ListAllCitationWatches(ctx context.Context) ([]domain.CitationWatch, error)
 	AddGiftCode(ctx context.Context, g domain.GiftCode) error
 	ListGiftCodes(ctx context.Context) ([]domain.GiftCode, error)
+	ListSubscriptionRequests(ctx context.Context, status domain.SubReqStatus) ([]domain.SubscriptionRequest, error)
+	GetSubscriptionRequest(ctx context.Context, id string) (*domain.SubscriptionRequest, error)
+	UpdateSubscriptionRequest(ctx context.Context, r domain.SubscriptionRequest) error
 	FeatureUsage(ctx context.Context) ([]domain.FeatureCount, error)
 	UserEvents(ctx context.Context, userID int64, limit int) ([]domain.UsageEvent, error)
 	TopUsers(ctx context.Context, limit int) ([]domain.UserUsage, error)
@@ -158,13 +161,27 @@ type Server struct {
 	predators   PredatorEditor
 	promotion   PromotionEditor
 	plans       PlansEditor
+	proofImages ProofImages
 	accounts    map[string]string // username -> password
+}
+
+// ProofImages fetches a payment-proof photo by its Telegram file id (implemented
+// by the bot). Optional: the queue still works without it (proof text only).
+type ProofImages interface {
+	ProofImage(ctx context.Context, fileID string) ([]byte, string, error)
 }
 
 // WithPlans attaches the subscription-plan editor (set from main; tests that
 // don't exercise the plans page leave it nil).
 func (s *Server) WithPlans(p PlansEditor) *Server {
 	s.plans = p
+	return s
+}
+
+// WithProofImages wires the proof-photo fetcher so the queue can preview
+// receipts uploaded in Telegram.
+func (s *Server) WithProofImages(p ProofImages) *Server {
+	s.proofImages = p
 	return s
 }
 
@@ -218,6 +235,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/plans", s.auth(s.handlePlans))
 	mux.HandleFunc("/admin/plans/save", s.auth(s.handlePlanSave))
 	mux.HandleFunc("/admin/plans/delete", s.auth(s.handlePlanDelete))
+	mux.HandleFunc("/admin/requests", s.auth(s.handleRequests))
+	mux.HandleFunc("/admin/requests/approve", s.auth(s.handleRequestApprove))
+	mux.HandleFunc("/admin/requests/reject", s.auth(s.handleRequestReject))
+	mux.HandleFunc("/admin/requests/proof", s.auth(s.handleRequestProof))
 	mux.HandleFunc("/admin/giftcodes", s.auth(s.handleGiftCodes))
 	mux.HandleFunc("/admin/giftcodes/generate", s.auth(s.handleGenerateCodes))
 	mux.HandleFunc("/admin/broadcast", s.auth(s.handleBroadcast))
@@ -841,6 +862,104 @@ func (s *Server) handlePlanDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/plans?msg="+urlencode("تم حذف الباقة"), http.StatusSeeOther)
+}
+
+// handleRequests renders the subscription-request queue.
+func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
+	s.renderRequests(w, r.Context(), r.URL.Query().Get("msg"), r.URL.Query().Get("err"))
+}
+
+// handleRequestApprove activates the requested plan for the user in one click,
+// marks the request approved, and notifies the user.
+func (s *Server) handleRequestApprove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	_ = r.ParseForm()
+	req, err := s.data.GetSubscriptionRequest(r.Context(), strings.TrimSpace(r.FormValue("id")))
+	if err != nil {
+		http.Redirect(w, r, "/admin/requests?err="+urlencode("الطلب غير موجود"), http.StatusSeeOther)
+		return
+	}
+	user, gerr := s.data.GetUser(r.Context(), req.UserID)
+	if gerr != nil || user == nil {
+		user = &domain.User{TelegramID: req.UserID, Name: req.UserName}
+	}
+	updated := *user
+	updated.GrantPremium(req.Tier, req.Months, time.Now())
+	if serr := s.data.SaveUser(r.Context(), &updated); serr != nil {
+		http.Redirect(w, r, "/admin/requests?err="+urlencode("تعذّر تفعيل المستخدم"), http.StatusSeeOther)
+		return
+	}
+	now := time.Now()
+	req.Status = domain.SubReqApproved
+	req.DecidedAt = &now
+	if uerr := s.data.UpdateSubscriptionRequest(r.Context(), *req); uerr != nil {
+		http.Redirect(w, r, "/admin/requests?err="+urlencode("فُعّل المستخدم لكن تعذّر تحديث الطلب"), http.StatusSeeOther)
+		return
+	}
+	if s.notifier != nil {
+		_ = s.notifier.Notify(req.UserID, premiumGrantedText(&updated))
+	}
+	http.Redirect(w, r, "/admin/requests?msg="+urlencode("تم تفعيل الاشتراك وإشعار المستخدم"), http.StatusSeeOther)
+}
+
+// handleRequestReject marks a request rejected with an optional reason and
+// notifies the user.
+func (s *Server) handleRequestReject(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	_ = r.ParseForm()
+	req, err := s.data.GetSubscriptionRequest(r.Context(), strings.TrimSpace(r.FormValue("id")))
+	if err != nil {
+		http.Redirect(w, r, "/admin/requests?err="+urlencode("الطلب غير موجود"), http.StatusSeeOther)
+		return
+	}
+	now := time.Now()
+	req.Status = domain.SubReqRejected
+	req.Note = strings.TrimSpace(r.FormValue("note"))
+	req.DecidedAt = &now
+	if uerr := s.data.UpdateSubscriptionRequest(r.Context(), *req); uerr != nil {
+		http.Redirect(w, r, "/admin/requests?err="+urlencode("تعذّر تحديث الطلب"), http.StatusSeeOther)
+		return
+	}
+	if s.notifier != nil {
+		msg := "تعذّر تأكيد دفعتك لطلب الاشتراك."
+		if req.Note != "" {
+			msg += "\nالسبب: " + req.Note
+		}
+		msg += "\nيمكنك المحاولة مجدداً أو التواصل مع الدعم."
+		_ = s.notifier.Notify(req.UserID, msg)
+	}
+	http.Redirect(w, r, "/admin/requests?msg="+urlencode("تم رفض الطلب وإشعار المستخدم"), http.StatusSeeOther)
+}
+
+// handleRequestProof streams a request's payment-receipt photo through the bot
+// (when a proof-image fetcher is wired). Returns 404 when unavailable.
+func (s *Server) handleRequestProof(w http.ResponseWriter, r *http.Request) {
+	if s.proofImages == nil {
+		http.NotFound(w, r)
+		return
+	}
+	req, err := s.data.GetSubscriptionRequest(r.Context(), strings.TrimSpace(r.URL.Query().Get("id")))
+	if err != nil || req.ProofFileID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	data, ctype, ferr := s.proofImages.ProofImage(r.Context(), req.ProofFileID)
+	if ferr != nil || len(data) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if ctype == "" {
+		ctype = "image/jpeg"
+	}
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	_, _ = w.Write(data)
 }
 
 // handleGiftCodes renders the gift-code generator and list.

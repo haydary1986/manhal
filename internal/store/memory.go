@@ -16,6 +16,7 @@ type Memory struct {
 	users     map[int64]domain.User
 	library   map[int64][]domain.LibraryItem
 	tickets   []domain.Ticket
+	subReqs   []domain.SubscriptionRequest
 	subs      []domain.Subscription
 	reminders map[string]bool // "userID:key" -> sent
 	watches   []domain.CitationWatch
@@ -322,6 +323,67 @@ func (m *Memory) AnswerTicket(_ context.Context, id, reply string) (domain.Ticke
 		}
 	}
 	return domain.Ticket{}, ErrNotFound
+}
+
+// AddSubscriptionRequest stores a new paid-subscription request.
+func (m *Memory) AddSubscriptionRequest(_ context.Context, r domain.SubscriptionRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now()
+	}
+	if r.Status == "" {
+		r.Status = domain.SubReqPending
+	}
+	m.subReqs = append(m.subReqs, r)
+	return nil
+}
+
+// ListSubscriptionRequests returns requests by status (empty = all), pending
+// first then newest.
+func (m *Memory) ListSubscriptionRequests(_ context.Context, status domain.SubReqStatus) ([]domain.SubscriptionRequest, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]domain.SubscriptionRequest, 0, len(m.subReqs))
+	for _, r := range m.subReqs {
+		if status == "" || r.Status == status {
+			out = append(out, r)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, pj := out[i].Status == domain.SubReqPending, out[j].Status == domain.SubReqPending
+		if pi != pj {
+			return pi // pending first
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
+// GetSubscriptionRequest returns a request by id.
+func (m *Memory) GetSubscriptionRequest(_ context.Context, id string) (*domain.SubscriptionRequest, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for i := range m.subReqs {
+		if m.subReqs[i].ID == id {
+			r := m.subReqs[i]
+			return &r, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+// UpdateSubscriptionRequest persists changes to an existing request.
+func (m *Memory) UpdateSubscriptionRequest(_ context.Context, r domain.SubscriptionRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.subReqs {
+		if m.subReqs[i].ID == r.ID {
+			m.subReqs[i] = r
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 // AddSubscription appends a subscription, ignoring duplicate IDs.

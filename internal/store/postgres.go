@@ -79,7 +79,24 @@ CREATE TABLE IF NOT EXISTS gift_codes (
   redeemed_by BIGINT NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   redeemed_at TIMESTAMPTZ
-);`
+);
+CREATE TABLE IF NOT EXISTS subscription_requests (
+  id            TEXT PRIMARY KEY,
+  user_id       BIGINT NOT NULL,
+  user_name     TEXT NOT NULL DEFAULT '',
+  plan_id       TEXT NOT NULL DEFAULT '',
+  plan_name     TEXT NOT NULL DEFAULT '',
+  months        INTEGER NOT NULL DEFAULT 0,
+  tier          TEXT NOT NULL DEFAULT 'researcher',
+  price         INTEGER NOT NULL DEFAULT 0,
+  proof         TEXT NOT NULL DEFAULT '',
+  proof_file_id TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'pending',
+  note          TEXT NOT NULL DEFAULT '',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS subscription_requests_status_idx ON subscription_requests (status);`
 
 // Postgres is a Store backed by PostgreSQL (pgx/v5).
 type Postgres struct {
@@ -469,6 +486,89 @@ func (p *Postgres) AnswerTicket(ctx context.Context, id, reply string) (domain.T
 		return domain.Ticket{}, fmt.Errorf("answer ticket: %w", err)
 	}
 	return t, nil
+}
+
+// --- subscription requests ---
+
+const subReqCols = `id, user_id, user_name, plan_id, plan_name, months, tier, price, proof, proof_file_id, status, note, created_at, decided_at`
+
+func (p *Postgres) AddSubscriptionRequest(ctx context.Context, r domain.SubscriptionRequest) error {
+	if r.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now()
+	}
+	if r.Status == "" {
+		r.Status = domain.SubReqPending
+	}
+	const q = `INSERT INTO subscription_requests (` + subReqCols + `)
+	           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
+	_, err := p.pool.Exec(ctx, q, r.ID, r.UserID, r.UserName, r.PlanID, r.PlanName, r.Months,
+		string(r.Tier), r.Price, r.Proof, r.ProofFileID, string(r.Status), r.Note, r.CreatedAt, r.DecidedAt)
+	if err != nil {
+		return fmt.Errorf("add subscription request: %w", err)
+	}
+	return nil
+}
+
+func (p *Postgres) ListSubscriptionRequests(ctx context.Context, status domain.SubReqStatus) ([]domain.SubscriptionRequest, error) {
+	q := `SELECT ` + subReqCols + ` FROM subscription_requests`
+	var args []any
+	if status != "" {
+		q += ` WHERE status = $1`
+		args = append(args, string(status))
+	}
+	q += ` ORDER BY (status = 'pending') DESC, created_at DESC`
+	rows, err := p.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list subscription requests: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.SubscriptionRequest
+	for rows.Next() {
+		r, err := scanSubReq(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (p *Postgres) GetSubscriptionRequest(ctx context.Context, id string) (*domain.SubscriptionRequest, error) {
+	const q = `SELECT ` + subReqCols + ` FROM subscription_requests WHERE id = $1`
+	r, err := scanSubReq(p.pool.QueryRow(ctx, q, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get subscription request: %w", err)
+	}
+	return &r, nil
+}
+
+func (p *Postgres) UpdateSubscriptionRequest(ctx context.Context, r domain.SubscriptionRequest) error {
+	const q = `UPDATE subscription_requests
+	           SET status = $2, note = $3, decided_at = $4
+	           WHERE id = $1`
+	ct, err := p.pool.Exec(ctx, q, r.ID, string(r.Status), r.Note, r.DecidedAt)
+	if err != nil {
+		return fmt.Errorf("update subscription request: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func scanSubReq(row rowScanner) (domain.SubscriptionRequest, error) {
+	var r domain.SubscriptionRequest
+	var tier, status string
+	if err := row.Scan(&r.ID, &r.UserID, &r.UserName, &r.PlanID, &r.PlanName, &r.Months,
+		&tier, &r.Price, &r.Proof, &r.ProofFileID, &status, &r.Note, &r.CreatedAt, &r.DecidedAt); err != nil {
+		return domain.SubscriptionRequest{}, err
+	}
+	r.Tier = domain.Tier(tier)
+	r.Status = domain.SubReqStatus(status)
+	return r, nil
 }
 
 // --- subscriptions ---

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/erticaz/manhal/internal/config"
+	"github.com/erticaz/manhal/internal/domain"
+	"github.com/erticaz/manhal/internal/plans"
 )
 
 func TestSubscribeScreen(t *testing.T) {
@@ -51,6 +53,32 @@ func TestSubscribeScreen(t *testing.T) {
 	// The benefits are always listed, even with no admin-configured info.
 	if !strings.Contains(scr2.Text, premiumBenefits()[0]) {
 		t.Errorf("subscribe screen should always list benefits:\n%s", scr2.Text)
+	}
+}
+
+func TestSubscribeScreen_RendersPlanButtons(t *testing.T) {
+	pl := []plans.Plan{
+		{ID: "monthly", Name: "شهري", Months: 1, Price: 5000, Tier: domain.TierResearcher},
+		{ID: "annual", Name: "سنوي", Months: 12, Price: 45000, Tier: domain.TierResearcher},
+	}
+	scr := subscribeScreen(config.BotSettings{}, pl)
+	got := map[string]bool{}
+	for _, row := range scr.Keyboard.Rows {
+		for _, b := range row {
+			got[b.Data] = true
+		}
+	}
+	for _, want := range []string{"premium:plan:monthly", "premium:plan:annual", "premium:code"} {
+		if !got[want] {
+			t.Errorf("subscribe screen missing button %q", want)
+		}
+	}
+	// With plans present, the legacy generic-request button is not shown.
+	if got["premium:request"] {
+		t.Error("legacy request button should be hidden when plans exist")
+	}
+	if !strings.Contains(scr.Text, "5000") {
+		t.Error("plan prices should appear in the text")
 	}
 }
 
