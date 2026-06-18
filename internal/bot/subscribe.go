@@ -14,14 +14,49 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// subscribeScreen shows the premium plans and the manual payment details the
-// admin configured, plus a button to register a paid request.
-func subscribeScreen(bs config.BotSettings) Screen {
-	info := strings.TrimSpace(bs.PremiumInfo)
-	if info == "" {
-		info = "الاشتراك المميّز يرفع حدود الاستخدام اليومية ويفتح كامل الأدوات."
+// premiumBenefits is the single source of truth for what a paid subscription
+// unlocks. It is shown on the subscribe screen and on the premium gate so the
+// value is always clear and consistent.
+func premiumBenefits() []string {
+	return []string{
+		"حدود استخدام يومية أعلى للأدوات الذكية (أو بلا حدود)",
+		"إعادة الكتابة البشرية لملفات Word كاملة (لا النص فقط)",
+		"أولوية في الدعم الفني",
 	}
-	text := "💎 الاشتراك المميّز في منهل\n\n" + info
+}
+
+// benefitsList renders the benefits as bullet lines.
+func benefitsList() string {
+	var b strings.Builder
+	for _, x := range premiumBenefits() {
+		b.WriteString("• " + x + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// premiumGateScreen is shown when a free user reaches a premium-only feature.
+func premiumGateScreen(reason string) Screen {
+	text := "💎 هذه ميزة مخصّصة للمشتركين."
+	if strings.TrimSpace(reason) != "" {
+		text += "\n" + reason
+	}
+	text += "\n\n✨ مزايا الاشتراك:\n" + benefitsList()
+	return Screen{
+		Text: text,
+		Keyboard: &Keyboard{Rows: [][]Button{
+			{{Text: "💎 الاشتراك / الترقية", Data: "menu:subscribe"}},
+			{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}},
+		}},
+	}
+}
+
+// subscribeScreen shows the premium benefits and plans plus the manual payment
+// details the admin configured, with a button to register a paid request.
+func subscribeScreen(bs config.BotSettings) Screen {
+	text := "💎 الاشتراك المميّز في منهل\n\n✨ ماذا تكسب:\n" + benefitsList()
+	if info := strings.TrimSpace(bs.PremiumInfo); info != "" {
+		text += "\n\n" + info
+	}
 	if pay := strings.TrimSpace(bs.PaymentDetails); pay != "" {
 		text += "\n\n💳 طريقة الدفع:\n" + pay
 	}

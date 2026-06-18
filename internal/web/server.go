@@ -180,7 +180,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/users", s.auth(s.handleUsers))
 	mux.HandleFunc("/admin/users/message", s.auth(s.handleUserMessage))
 	mux.HandleFunc("/admin/users/activity", s.auth(s.handleUserActivity))
-	mux.HandleFunc("/admin/users/tier", s.auth(s.handleUserTier))
+	mux.HandleFunc("/admin/users/premium", s.auth(s.handleUserPremium))
 	mux.HandleFunc("/admin/announcements", s.auth(s.handleAnnouncements))
 	mux.HandleFunc("/admin/announcements/add", s.auth(s.handleAnnounceAdd))
 	mux.HandleFunc("/admin/announcements/delete", s.auth(s.handleAnnounceDelete))
@@ -417,8 +417,10 @@ func (s *Server) handleUserMessage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users?msg="+urlencode("تم إرسال الرسالة للمستخدم"), http.StatusSeeOther)
 }
 
-// handleUserTier sets a user's subscription tier (manual premium grant/revoke).
-func (s *Server) handleUserTier(w http.ResponseWriter, r *http.Request) {
+// handleUserPremium activates, extends, or revokes a user's premium tier. A
+// grant takes a plan in months (0 = permanent); extending an active grant adds
+// to the remaining time. action="revoke" returns the user to free.
+func (s *Server) handleUserPremium(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -428,8 +430,7 @@ func (s *Server) handleUserTier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
-	tier := domain.Tier(strings.TrimSpace(r.FormValue("tier")))
-	if err != nil || !validTier(tier) {
+	if err != nil {
 		http.Redirect(w, r, "/admin/users?err="+urlencode("بيانات غير صالحة"), http.StatusSeeOther)
 		return
 	}
@@ -439,17 +440,44 @@ func (s *Server) handleUserTier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated := *user
-	updated.Tier = tier
-	updated.PremiumUntil = nil // manual grant is permanent until changed
+
+	if r.FormValue("action") == "revoke" {
+		updated.RevokePremium()
+		if serr := s.data.SaveUser(r.Context(), &updated); serr != nil {
+			http.Redirect(w, r, "/admin/users?err="+urlencode("تعذّر الحفظ"), http.StatusSeeOther)
+			return
+		}
+		if s.notifier != nil {
+			_ = s.notifier.Notify(id, "انتهى اشتراكك المميّز في منهل. يمكنك التجديد في أي وقت عبر زر 💎 الاشتراك.")
+		}
+		http.Redirect(w, r, "/admin/users?msg="+urlencode("تم إلغاء البريميم"), http.StatusSeeOther)
+		return
+	}
+
+	// Grant / extend. Default to the full (researcher) tier; months 0 = permanent.
+	tier := domain.Tier(strings.TrimSpace(r.FormValue("tier")))
+	if !validTier(tier) || tier == domain.TierFree {
+		tier = domain.TierResearcher
+	}
+	months, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("months")))
+	updated.GrantPremium(tier, months, time.Now())
 	if serr := s.data.SaveUser(r.Context(), &updated); serr != nil {
 		http.Redirect(w, r, "/admin/users?err="+urlencode("تعذّر حفظ الاشتراك"), http.StatusSeeOther)
 		return
 	}
-	// Best-effort: notify the user of their new tier.
-	if s.notifier != nil && tier != domain.TierFree {
-		_ = s.notifier.Notify(id, "🎉 تم تفعيل اشتراكك المميّز في منهل! استمتع بكامل الميزات.")
+	if s.notifier != nil {
+		_ = s.notifier.Notify(id, premiumGrantedText(&updated))
 	}
-	http.Redirect(w, r, "/admin/users?msg="+urlencode("تم تحديث اشتراك المستخدم"), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/users?msg="+urlencode("تم تفعيل/تمديد اشتراك المستخدم"), http.StatusSeeOther)
+}
+
+// premiumGrantedText is the in-Telegram confirmation a user receives on grant.
+func premiumGrantedText(u *domain.User) string {
+	if u.PremiumUntil == nil {
+		return "🎉 تم تفعيل اشتراكك المميّز في منهل بشكل دائم! استمتع بكامل الأدوات 🌟"
+	}
+	return "🎉 تم تفعيل اشتراكك المميّز في منهل حتى " + u.PremiumUntil.Format("2006-01-02") +
+		"! استمتع بكامل الأدوات 🌟"
 }
 
 // validTier reports whether t is one of the known subscription tiers.

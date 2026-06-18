@@ -48,4 +48,29 @@ func TestSubscribeScreen(t *testing.T) {
 			}
 		}
 	}
+	// The benefits are always listed, even with no admin-configured info.
+	if !strings.Contains(scr2.Text, premiumBenefits()[0]) {
+		t.Errorf("subscribe screen should always list benefits:\n%s", scr2.Text)
+	}
+}
+
+func TestPremiumGateScreen_ListsBenefitsAndSubscribe(t *testing.T) {
+	scr := premiumGateScreen("ميزة الملفات للمشتركين")
+	if !strings.Contains(scr.Text, "ميزة الملفات للمشتركين") {
+		t.Error("gate should include the reason")
+	}
+	if !strings.Contains(scr.Text, premiumBenefits()[0]) {
+		t.Error("gate should list premium benefits")
+	}
+	var hasSubscribe bool
+	for _, row := range scr.Keyboard.Rows {
+		for _, b := range row {
+			if b.Data == "menu:subscribe" {
+				hasSubscribe = true
+			}
+		}
+	}
+	if !hasSubscribe {
+		t.Error("gate should offer a subscribe button")
+	}
 }

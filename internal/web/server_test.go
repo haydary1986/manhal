@@ -367,19 +367,35 @@ func TestUsers_ListMessageTier(t *testing.T) {
 		t.Errorf("pushed text missing message: %q", notifier.text)
 	}
 
-	// Granting a premium tier persists and makes the user premium.
-	form2 := url.Values{"id": {"50"}, "tier": {"researcher"}}
-	req3 := httptest.NewRequest(http.MethodPost, "/admin/users/tier", strings.NewReader(form2.Encode()))
+	// Granting a 1-month premium persists, makes the user premium, and sets an
+	// expiry roughly one month out.
+	form2 := url.Values{"id": {"50"}, "action": {"grant"}, "tier": {"researcher"}, "months": {"1"}}
+	req3 := httptest.NewRequest(http.MethodPost, "/admin/users/premium", strings.NewReader(form2.Encode()))
 	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req3.SetBasicAuth("admin", "secret")
 	rec3 := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec3, req3)
 	if rec3.Code != http.StatusSeeOther {
-		t.Fatalf("tier status = %d", rec3.Code)
+		t.Fatalf("premium status = %d", rec3.Code)
 	}
 	u, _ := st.GetUser(context.Background(), 50)
 	if u.Tier != domain.TierResearcher || !u.IsPremium(time.Now()) {
 		t.Errorf("user not premium after grant: tier=%q", u.Tier)
+	}
+	if u.PremiumUntil == nil {
+		t.Error("1-month grant should set an expiry, got permanent")
+	}
+
+	// Revoking returns the user to free.
+	form3 := url.Values{"id": {"50"}, "action": {"revoke"}}
+	req4 := httptest.NewRequest(http.MethodPost, "/admin/users/premium", strings.NewReader(form3.Encode()))
+	req4.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req4.SetBasicAuth("admin", "secret")
+	rec4 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec4, req4)
+	u2, _ := st.GetUser(context.Background(), 50)
+	if u2.Tier != domain.TierFree || u2.IsPremium(time.Now()) {
+		t.Errorf("user still premium after revoke: tier=%q", u2.Tier)
 	}
 }
 

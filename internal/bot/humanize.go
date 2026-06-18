@@ -79,14 +79,7 @@ func (a *App) handleHumanizeDoc(ctx context.Context, msg *models.Message) {
 	doc := msg.Document
 
 	if !a.isPremiumUser(ctx, msg.From.ID) {
-		a.send(ctx, chatID, Screen{
-			Text: "💎 معالجة ملفات Word متاحة للمشتركين فقط.\n" +
-				"يمكنك إرسال النص مباشرةً مجاناً، أو الاشتراك لمعالجة الملفات كاملة.",
-			Keyboard: &Keyboard{Rows: [][]Button{
-				{{Text: "💎 الاشتراك / الترقية", Data: "menu:subscribe"}},
-				{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}},
-			}},
-		})
+		a.send(ctx, chatID, premiumGateScreen("معالجة ملفات Word كاملة متاحة للمشتركين — يمكنك إرسال النص مباشرةً مجاناً."))
 		return
 	}
 	if !strings.HasSuffix(strings.ToLower(doc.FileName), ".docx") {

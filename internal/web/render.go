@@ -280,7 +280,11 @@ type userManageVM struct {
 	Tier      string
 	TierLabel string
 	IsPremium bool
-	Joined    string
+	// PremiumState is one of "active", "expired", "free" — drives the badge.
+	PremiumState string
+	// StatusText is the human-readable status, e.g. "💎 باحث — ينتهي 2026-07-18 (متبقّي 30 يوم)".
+	StatusText string
+	Joined     string
 }
 
 type usersVM struct {
@@ -288,6 +292,7 @@ type usersVM struct {
 	Users    []userManageVM
 	Total    int
 	Premium  int
+	Expired  int
 	Msg, Err string
 }
 
@@ -300,6 +305,24 @@ func tierLabel(t string) string {
 	default:
 		return "مجاني"
 	}
+}
+
+// premiumStatus returns a display state ("active"/"expired"/"free") and a clear
+// Arabic status line for a user's premium standing.
+func premiumStatus(u *domain.User, now time.Time) (state, text string) {
+	if u.IsPremium(now) {
+		label := tierLabel(string(u.Tier))
+		if days, ok := u.PremiumDaysLeft(now); ok {
+			return "active", "💎 " + label + " — ينتهي " + u.PremiumUntil.Format("2006-01-02") +
+				" (متبقّي " + strconv.Itoa(days) + " يوم)"
+		}
+		return "active", "💎 " + label + " — دائم"
+	}
+	if u.IsExpired(now) {
+		return "expired", "⏳ منتهٍ — كان " + tierLabel(string(u.Tier)) +
+			" حتى " + u.PremiumUntil.Format("2006-01-02")
+	}
+	return "free", "مجاني"
 }
 
 // renderUsers lists every user (most active first) with messaging and tier
@@ -319,21 +342,27 @@ func (s *Server) renderUsers(w http.ResponseWriter, ctx context.Context, msg, er
 	rows := make([]userManageVM, 0, len(users))
 	for _, u := range users {
 		prem := u.IsPremium(now)
-		if prem {
-			vm.Premium++
-		}
 		tier := string(u.Tier)
 		if tier == "" {
 			tier = string(domain.TierFree)
 		}
+		state, status := premiumStatus(&u, now)
+		switch state {
+		case "active":
+			vm.Premium++
+		case "expired":
+			vm.Expired++
+		}
 		rows = append(rows, userManageVM{
-			Name:      nameOr(u.Name),
-			ID:        strconv.FormatInt(u.TelegramID, 10),
-			Count:     counts[u.TelegramID],
-			Tier:      tier,
-			TierLabel: tierLabel(tier),
-			IsPremium: prem,
-			Joined:    u.CreatedAt.Format("2006-01-02"),
+			Name:         nameOr(u.Name),
+			ID:           strconv.FormatInt(u.TelegramID, 10),
+			Count:        counts[u.TelegramID],
+			Tier:         tier,
+			TierLabel:    tierLabel(tier),
+			IsPremium:    prem,
+			PremiumState: state,
+			StatusText:   status,
+			Joined:       u.CreatedAt.Format("2006-01-02"),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -1319,18 +1348,20 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
 
 <div class="stats">
   <div class="stat"><div class="num">{{.Total}}</div><div class="lbl">👥 إجمالي المستخدمين</div></div>
-  <div class="stat"><div class="num">{{.Premium}}</div><div class="lbl">💎 مشتركو البريميم</div></div>
+  <div class="stat"><div class="num">{{.Premium}}</div><div class="lbl">💎 بريميم نشط</div></div>
+  <div class="stat {{if .Expired}}warn{{end}}"><div class="num">{{.Expired}}</div><div class="lbl">⏳ اشتراكات منتهية</div></div>
 </div>
 
 <div class="card">
   <h3>🏆 المستخدمون — الأنشط أولاً</h3>
-  <p style="color:#64748b;font-size:13px;margin:0 0 14px">اضغط على أي مستخدم لمراسلته مباشرة أو تغيير اشتراكه.</p>
+  <p style="color:#64748b;font-size:13px;margin:0 0 6px">اضغط على أي مستخدم لمراسلته مباشرة أو إدارة اشتراكه.</p>
+  <p style="color:#94a3b8;font-size:12px;margin:0 0 14px">💎 البريميم يرفع الحدود اليومية للأدوات الذكية ويفتح الأدوات الكاملة (مثل إعادة كتابة ملفات Word). اختر مدّة ثم «تفعيل/تمديد»؛ التمديد يضيف على المتبقّي. تنتهي الاشتراكات المؤقّتة تلقائياً.</p>
   {{range .Users}}
   <details class="urow">
     <summary>
       <span class="rank {{if le .Rank 3}}gold{{end}}">{{.Rank}}</span>
       <span><span class="r-name">{{.Name}}</span> <span class="r-id">#{{.ID}}</span></span>
-      {{if .IsPremium}}<span class="r-tag">💎 {{.TierLabel}}</span>{{end}}
+      {{if eq .PremiumState "active"}}<span class="r-tag">💎 {{.TierLabel}}</span>{{else if eq .PremiumState "expired"}}<span class="r-tag" style="background:#fef3c7;color:#92400e">⏳ منتهٍ</span>{{end}}
       <span class="usp"></span>
       <span class="r-count" title="عدد مرات الاستخدام">{{.Count}}</span>
     </summary>
@@ -1341,17 +1372,42 @@ var usersTemplate = template.Must(template.New("users").Parse(layoutHead + `
         <textarea name="text" rows="2" placeholder="مثال: تم استلام مبلغ الاشتراك وتفعيل حسابك." required></textarea>
         <button class="btn" type="submit">إرسال الرسالة</button>
       </form>
-      <form method="post" action="/admin/users/tier" class="ucard">
-        <input type="hidden" name="id" value="{{.ID}}">
-        <label>💎 الاشتراك (تفعيل/إلغاء البريميم يدوياً)</label>
-        <select name="tier">
-          <option value="free" {{if eq .Tier "free"}}selected{{end}}>مجاني</option>
-          <option value="student" {{if eq .Tier "student"}}selected{{end}}>طالب (بريميم)</option>
-          <option value="researcher" {{if eq .Tier "researcher"}}selected{{end}}>باحث (بريميم)</option>
-        </select>
-        <button class="btn" type="submit">تحديث الاشتراك</button>
-        <div style="font-size:12px;color:#94a3b8;margin-top:8px">انضمّ: {{.Joined}}</div>
-      </form>
+      <div class="ucard">
+        <label>💎 الاشتراك المميّز</label>
+        <div style="font-size:13px;margin:2px 0 12px;font-weight:600">الحالة: {{.StatusText}}</div>
+        <form method="post" action="/admin/users/premium">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <input type="hidden" name="action" value="grant">
+          <div class="grid2">
+            <div>
+              <label>المدّة</label>
+              <select name="months">
+                <option value="1">شهر واحد</option>
+                <option value="3">٣ أشهر</option>
+                <option value="6">٦ أشهر</option>
+                <option value="12">سنة كاملة</option>
+                <option value="0">دائم (بلا انتهاء)</option>
+              </select>
+            </div>
+            <div>
+              <label>الباقة</label>
+              <select name="tier">
+                <option value="researcher" {{if eq .Tier "student"}}{{else}}selected{{end}}>باحث</option>
+                <option value="student" {{if eq .Tier "student"}}selected{{end}}>طالب</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn block" type="submit">✅ تفعيل / تمديد</button>
+        </form>
+        {{if ne .PremiumState "free"}}
+        <form method="post" action="/admin/users/premium" onsubmit="return confirm('إلغاء البريميم وإرجاع المستخدم للمجاني؟');" style="margin-top:8px">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <input type="hidden" name="action" value="revoke">
+          <button class="btn-del" type="submit">إلغاء البريميم</button>
+        </form>
+        {{end}}
+        <div style="font-size:12px;color:#94a3b8;margin-top:10px">انضمّ: {{.Joined}}</div>
+      </div>
     </div>
     <div style="padding:0 16px 14px">
       <a href="/admin/users/activity?id={{.ID}}" class="tag" style="text-decoration:none">📋 سجلّ النشاط (ماذا استخدم وأين توقّف)</a>
