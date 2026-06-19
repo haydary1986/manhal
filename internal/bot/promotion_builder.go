@@ -23,10 +23,11 @@ var promoCategories = []promoCategory{
 	{"📄 بحوث IF/CS", []string{"if_first", "if_second", "if_third", "if_fourth", "if_fifth", "if_sixthplus"}},
 	{"📄 بحوث عراقية", []string{"iq_first", "iq_second", "iq_third", "iq_fourth", "iq_fifth", "iq_sixthplus"}},
 	{"📚 كتب ومؤتمرات", []string{"book_local_solo", "book_local_two", "book_local_multi", "book_intl_solo", "book_intl_two", "book_intl_multi", "book_chapter", "conference_paper"}},
-	{"🔬 دراسات ومقالات", []string{"community_study_in", "community_study_out", "citations10", "review_article", "popular_article"}},
+	{"🔬 دراسات ومقالات", []string{"community_study_in", "community_study_out", "citations10", "review_article", "popular_article", "review_eval_in", "review_eval_out"}},
 	{"🏅 براءات وأوسمة", []string{"patent_intl", "patent_local", "award_intl", "award_local"}},
-	{"⚖️ لجان وعضويات", []string{"exam_committee", "thesis_committee", "scientific_committee", "conf_committee", "ministerial_committee", "union_academics", "union_professional"}},
-	{"🎓 إشراف وتحرير", []string{"supervise_master", "supervise_phd", "editor_chief", "editor_member"}},
+	{"⚖️ لجان وعضويات", []string{"exam_committee", "thesis_committee", "scientific_committee", "conf_committee", "ministerial_committee", "seminar_committee", "new_dept_committee", "inventory_committee", "union_academics", "union_professional"}},
+	{"🎓 إشراف وتحرير", []string{"supervise_master", "supervise_phd", "extracurricular", "dorm_supervision", "edu_guidance", "training_lecturer", "intl_cooperation", "editor_chief", "editor_member"}},
+	{"🏥 خدمات ومتنوّعة", []string{"teaching_hospital", "sports_activity", "graduate_employment", "h_index_excess", "perf_eval_70", "perf_eval_80", "perf_eval_90", "creative_work"}},
 }
 
 // promoActivityMap indexes all activities by key for quick label/points lookup.

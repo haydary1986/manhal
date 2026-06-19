@@ -31,6 +31,30 @@ func TestPromotionTable2Screen_AllItems(t *testing.T) {
 	}
 }
 
+// Every Table-2 activity must be reachable in the interactive builder exactly
+// once (via a named category or the auto "بنود أخرى" bucket).
+func TestPromoEffectiveCategories_CoverAllTable2Keys(t *testing.T) {
+	a := promoApp()
+	want := map[string]bool{}
+	for _, act := range a.promotion.ActivitiesByTable(2) {
+		want[act.Key] = true
+	}
+	seen := map[string]int{}
+	for _, c := range a.promoEffectiveCategories() {
+		for _, k := range c.Keys {
+			seen[k]++
+		}
+	}
+	for k := range want {
+		if seen[k] == 0 {
+			t.Errorf("Table-2 key %q is not reachable in any builder category", k)
+		}
+		if seen[k] > 1 {
+			t.Errorf("Table-2 key %q appears in %d categories (should be 1)", k, seen[k])
+		}
+	}
+}
+
 func TestPromotionRankScreen_HasTableButtons(t *testing.T) {
 	scr := promoApp().promotionRankScreen()
 	got := map[string]bool{}
