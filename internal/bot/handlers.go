@@ -92,7 +92,7 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 	case "ai":
 		a.send(ctx, cq.From.ID, a.aiMenuScreen(cq.From.ID))
 	case "promotion":
-		a.send(ctx, cq.From.ID, a.promotionRankScreen())
+		a.send(ctx, cq.From.ID, a.promotionIntroScreen())
 	case "publish":
 		a.sessions.set(cq.From.ID, stateAwaitPublish)
 		a.send(ctx, cq.From.ID, publishPromptScreen())

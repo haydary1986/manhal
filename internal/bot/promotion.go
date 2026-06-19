@@ -10,20 +10,36 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// promotionIntroScreen is the calculator's landing screen: it explains how to
+// fill in the data and offers the two official tables before starting.
+func (a *App) promotionIntroScreen() Screen {
+	return Screen{
+		Text: "🎓 حاسبة نقاط الترقية العلمية\n" +
+			"تعليمات الترقيات العلمية 2025-2026\n\n" +
+			"📝 طريقة ملء البيانات:\n" +
+			"١) اطّلع على الجدول الأول (البحوث) والجدول الثاني (النشاطات) لمعرفة البنود ونقاطها.\n" +
+			"٢) اضغط «ابدأ بملء البيانات» واختر رتبتك الحالية.\n" +
+			"٣) أضِف عدد كل بند أنجزته — بالأزرار، أو كتابةً، أو بوصف إنجازاتك للذكاء الاصطناعي.\n" +
+			"٤) تظهر نتيجتك مقابل الشروط الأربعة (المجموع · الجدول ١ · الجدول ٢ · الخدمة).\n\n" +
+			"ابدأ من الأزرار أدناه 👇",
+		Keyboard: &Keyboard{Rows: [][]Button{
+			{{Text: "📊 الجدول الأول (البحوث)", Data: "promo:table1"}, {Text: "📋 الجدول الثاني (النشاطات)", Data: "promo:table2"}},
+			{{Text: "✅ ابدأ بملء البيانات", Data: "promo:start"}},
+			{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}},
+		}},
+	}
+}
+
 // promotionRankScreen asks the user to pick their current rank.
 func (a *App) promotionRankScreen() Screen {
 	rows := [][]Button{}
 	for _, rk := range a.promotion.Ranks() {
 		rows = append(rows, []Button{{Text: rk.Label + " ← " + rk.NextLabel, Data: "promo:rank:" + rk.Key}})
 	}
-	rows = append(rows,
-		[]Button{{Text: "📊 الجدول الأول (البحوث)", Data: "promo:table1"}, {Text: "📋 الجدول الثاني (النشاطات)", Data: "promo:table2"}},
-		[]Button{{Text: "⬅️ رجوع للقائمة", Data: "menu:home"}},
-	)
+	rows = append(rows, []Button{{Text: "⬅️ رجوع", Data: "promo:intro"}})
 	return Screen{
-		Text: "🎓 حاسبة نقاط الترقية العلمية\n" +
-			"(تعليمات الترقيات العلمية 2025-2026)\n\n" +
-			"📊 اطّلع على الجدولين الرسميين، أو اختر رتبتك الحالية لحساب نقاطك:",
+		Text: "🎓 اختر رتبتك الحالية\n\n" +
+			"سيُحسب المطلوب للترقية إلى الرتبة التالية مقابل ما تُدخله من بنود:",
 		Keyboard: &Keyboard{Rows: rows},
 	}
 }
@@ -44,6 +60,10 @@ func (a *App) handlePromotion(ctx context.Context, b *tg.Bot, update *models.Upd
 	data := strings.TrimPrefix(cq.Data, "promo:")
 
 	switch {
+	case data == "intro":
+		a.send(ctx, userID, a.promotionIntroScreen())
+	case data == "start":
+		a.send(ctx, userID, a.promotionRankScreen())
 	case data == "table1":
 		a.send(ctx, userID, promotionTable1Screen())
 	case data == "table2":

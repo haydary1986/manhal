@@ -10,8 +10,8 @@ import "strings"
 func promoTablesNav() *Keyboard {
 	return &Keyboard{Rows: [][]Button{
 		{{Text: "📊 الجدول الأول", Data: "promo:table1"}, {Text: "📋 الجدول الثاني", Data: "promo:table2"}},
-		{{Text: "🧮 حاسبة الترقية", Data: "menu:promotion"}},
-		{{Text: "⬅️ القائمة الرئيسية", Data: "menu:home"}},
+		{{Text: "✅ ابدأ بملء البيانات", Data: "promo:start"}},
+		{{Text: "⬅️ رجوع", Data: "promo:intro"}, {Text: "🏠 القائمة الرئيسية", Data: "menu:home"}},
 	}}
 }
 

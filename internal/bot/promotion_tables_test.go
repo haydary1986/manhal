@@ -55,15 +55,20 @@ func TestPromoEffectiveCategories_CoverAllTable2Keys(t *testing.T) {
 	}
 }
 
-func TestPromotionRankScreen_HasTableButtons(t *testing.T) {
-	scr := promoApp().promotionRankScreen()
+func TestPromotionIntroScreen_HasTablesAndStart(t *testing.T) {
+	scr := promoApp().promotionIntroScreen()
 	got := map[string]bool{}
 	for _, row := range scr.Keyboard.Rows {
 		for _, b := range row {
 			got[b.Data] = true
 		}
 	}
-	if !got["promo:table1"] || !got["promo:table2"] {
-		t.Error("rank screen should expose both table buttons")
+	for _, want := range []string{"promo:table1", "promo:table2", "promo:start"} {
+		if !got[want] {
+			t.Errorf("intro screen missing button %q", want)
+		}
+	}
+	if !strings.Contains(scr.Text, "طريقة ملء البيانات") {
+		t.Error("intro screen should explain how to fill the data")
 	}
 }
