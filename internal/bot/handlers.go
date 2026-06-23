@@ -69,6 +69,11 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 		a.recordUsage(ctx, cq.From.ID, action) // analytics; best-effort
 	}
 
+	// Premium-only features show an upsell to free users instead of running.
+	if !a.requirePremium(ctx, cq.From.ID, action) {
+		return
+	}
+
 	switch action {
 	case "home":
 		a.send(ctx, cq.From.ID, a.mainMenuScreen())
