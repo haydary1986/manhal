@@ -30,6 +30,9 @@ type Deps struct {
 	AI          ai.Provider
 	Citations   CitationSource
 	Search      PaperSearch
+	PubMed      PaperSearch // additional scholarly sources (free APIs)
+	Arxiv       PaperSearch
+	S2          PaperSearch
 	Authors     AuthorSearch
 	AuthorWorks AuthorWorksSource
 	Trends      TrendSource
@@ -56,6 +59,9 @@ type App struct {
 	ai           ai.Provider
 	cite         CitationSource
 	search       PaperSearch
+	pubmed       PaperSearch
+	arxiv        PaperSearch
+	s2           PaperSearch
 	authorSearch AuthorSearch
 	authorWorks  AuthorWorksSource
 	trends       TrendSource
@@ -84,6 +90,9 @@ func New(d Deps) (*App, error) {
 		ai:           d.AI,
 		cite:         d.Citations,
 		search:       d.Search,
+		pubmed:       d.PubMed,
+		arxiv:        d.Arxiv,
+		s2:           d.S2,
 		authorSearch: d.Authors,
 		authorWorks:  d.AuthorWorks,
 		trends:       d.Trends,
@@ -120,6 +129,7 @@ func New(d Deps) (*App, error) {
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "ann:", tg.MatchTypePrefix, a.handleAnnouncements)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "field:", tg.MatchTypePrefix, a.handleField)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "search:cite:", tg.MatchTypePrefix, a.handleSearchCite)
+	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "ext:", tg.MatchTypePrefix, a.handleExtSource)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "author:profile:", tg.MatchTypePrefix, a.handleAuthorProfile)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "ai:tool:", tg.MatchTypePrefix, a.handleAITool)
 	b.RegisterHandler(tg.HandlerTypeCallbackQueryData, "promo:", tg.MatchTypePrefix, a.handlePromotion)
@@ -239,6 +249,9 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 	case stateAwaitDOI:
 		a.sessions.clear(msg.From.ID)
 		a.handleCiteDOI(ctx, msg)
+		return
+	case stateAwaitPubmed, stateAwaitArxiv, stateAwaitS2:
+		a.runExtSearch(ctx, msg, a.sessions.get(msg.From.ID))
 		return
 	case stateAwaitQuery:
 		a.handleSearchQuery(ctx, msg) // stores results; keeps the session alive

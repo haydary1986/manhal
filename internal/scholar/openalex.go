@@ -26,6 +26,8 @@ type SearchResult struct {
 	Venue   string // journal/conference name
 	CitedBy int
 	DOI     string // bare DOI, or "" when none is recorded
+	Summary string // optional one-line gist (e.g. Semantic Scholar TLDR)
+	URL     string // optional source link when there is no DOI (arXiv/PubMed)
 }
 
 // Author is a researcher profile summary.

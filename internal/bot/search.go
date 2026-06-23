@@ -111,10 +111,17 @@ func renderSearchResult(r scholar.SearchResult) string {
 	if len(meta) > 0 {
 		b.WriteString("   " + strings.Join(meta, " · ") + "\n")
 	}
+	if r.Summary != "" {
+		b.WriteString("   💡 " + r.Summary + "\n")
+	}
 
 	b.WriteString("   📊 الاستشهادات: " + strconv.Itoa(r.CitedBy))
 	if r.DOI == "" {
-		b.WriteString("\n   ⚠️ بدون DOI — الاقتباس غير متاح")
+		if r.URL != "" {
+			b.WriteString("\n   🔗 " + r.URL)
+		} else {
+			b.WriteString("\n   ⚠️ بدون DOI — الاقتباس غير متاح")
+		}
 	}
 	return b.String()
 }

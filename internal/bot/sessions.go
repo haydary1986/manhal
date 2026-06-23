@@ -45,6 +45,9 @@ const (
 	stateAwaitPdfFile     sessionState = "await_pdf_file"
 	statePdfChat          sessionState = "pdf_chat"
 	stateAwaitPayProof    sessionState = "await_pay_proof"
+	stateAwaitPubmed      sessionState = "await_pubmed"
+	stateAwaitArxiv       sessionState = "await_arxiv"
+	stateAwaitS2          sessionState = "await_s2"
 )
 
 // session holds one user's conversational context: the wizard state plus the

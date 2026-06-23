@@ -77,6 +77,8 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 	case "search":
 		a.sessions.set(cq.From.ID, stateAwaitQuery)
 		a.send(ctx, cq.From.ID, searchPromptScreen())
+	case "extsearch":
+		a.send(ctx, cq.From.ID, extSearchScreen())
 	case "cite":
 		a.sessions.set(cq.From.ID, stateAwaitDOI)
 		a.send(ctx, cq.From.ID, citePromptScreen())
