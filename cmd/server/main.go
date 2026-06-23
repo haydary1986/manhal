@@ -26,6 +26,8 @@ import (
 	"github.com/erticaz/manhal/internal/scholar"
 	"github.com/erticaz/manhal/internal/store"
 	"github.com/erticaz/manhal/internal/web"
+	"github.com/erticaz/manhal/internal/websearch"
+	"github.com/erticaz/manhal/internal/youtube"
 )
 
 func main() {
@@ -149,6 +151,8 @@ func main() {
 		Related:     openAlex,
 		Retraction:  crossref,
 		Pexels:      pexels.New(cfg.PexelsKey),
+		Web:         websearch.NewTavily(cfg.TavilyKey),
+		YouTube:     youtube.New(),
 	})
 
 	// The bot acts as the push notifier for admin support replies; nil when the

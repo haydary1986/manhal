@@ -79,6 +79,12 @@ func (a *App) handleMenu(ctx context.Context, b *tg.Bot, update *models.Update) 
 		a.send(ctx, cq.From.ID, searchPromptScreen())
 	case "extsearch":
 		a.send(ctx, cq.From.ID, extSearchScreen())
+	case "websearch":
+		a.sessions.set(cq.From.ID, stateAwaitWebSearch)
+		a.send(ctx, cq.From.ID, a.webSearchPromptScreen())
+	case "ytsummary":
+		a.sessions.set(cq.From.ID, stateAwaitYouTube)
+		a.send(ctx, cq.From.ID, a.youtubePromptScreen())
 	case "cite":
 		a.sessions.set(cq.From.ID, stateAwaitDOI)
 		a.send(ctx, cq.From.ID, citePromptScreen())

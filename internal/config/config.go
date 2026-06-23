@@ -18,6 +18,7 @@ type Config struct {
 	CrossrefMailto string // contact email for the Crossref polite pool (optional)
 	UnpaywallEmail string // required by Unpaywall; falls back to CrossrefMailto
 	PexelsKey      string // Pexels API key for presentation images (optional)
+	TavilyKey      string // Tavily API key for AI web search (optional)
 	AdminIDs       []int64
 	DataDir        string            // directory holding the editable YAML files
 	WebAddr        string            // listen address for the admin web server
@@ -42,6 +43,7 @@ func Load() (*Config, error) {
 		CrossrefMailto: os.Getenv("CROSSREF_MAILTO"),
 		UnpaywallEmail: os.Getenv("UNPAYWALL_EMAIL"),
 		PexelsKey:      os.Getenv("PEXELS_API_KEY"),
+		TavilyKey:      os.Getenv("TAVILY_API_KEY"),
 		DataDir:        getenvDefault("DATA_DIR", "data"),
 		AdminIDs:       parseIDs(os.Getenv("ADMIN_IDS")),
 		WebAddr:        getenvDefault("WEB_ADDR", ":8080"),

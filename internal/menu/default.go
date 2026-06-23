@@ -9,6 +9,8 @@ func DefaultTree() []Item {
 		{ID: "follow", Label: "🔔 متابعاتي", Action: "follow"},
 		{ID: "search", Label: "🔍 بحث عن ورقة", Action: "search"},
 		{ID: "extsearch", Label: "🔬 مصادر علمية إضافية", Action: "extsearch"},
+		{ID: "websearch", Label: "🌐 بحث ذكي في الويب", Action: "websearch"},
+		{ID: "ytsummary", Label: "▶️ تلخيص فيديو يوتيوب", Action: "ytsummary"},
 		{ID: "cite", Label: "📝 توليد اقتباس", Action: "cite"},
 		{ID: "journal", Label: "🛡️ فحص مجلة", Action: "journal"},
 		{ID: "oa", Label: "🔓 نسخة مجانية", Action: "oa"},

@@ -48,6 +48,8 @@ type Deps struct {
 	Related     RelatedSource     // similar-papers lookup
 	Retraction  RetractionChecker // retracted-paper check
 	Pexels      PhotoSource       // presentation images (nil/disabled => text-only decks)
+	Web         WebSearcher       // AI web search (nil/disabled => feature off)
+	YouTube     Transcriber       // YouTube transcript fetcher (nil => feature off)
 }
 
 // App wires the Telegram adapter with the core dependencies.
@@ -77,6 +79,8 @@ type App struct {
 	related      RelatedSource
 	retraction   RetractionChecker
 	pexels       PhotoSource
+	web          WebSearcher
+	youtube      Transcriber
 	usage        *usageLimiter
 	sessions     *sessions
 }
@@ -108,6 +112,8 @@ func New(d Deps) (*App, error) {
 		related:      d.Related,
 		retraction:   d.Retraction,
 		pexels:       d.Pexels,
+		web:          d.Web,
+		youtube:      d.YouTube,
 		sessions:     newSessions(),
 	}
 	// Tier-aware daily AI quota (free vs premium), resolved per user at call time.
@@ -252,6 +258,12 @@ func (a *App) defaultHandler(ctx context.Context, _ *tg.Bot, update *models.Upda
 		return
 	case stateAwaitPubmed, stateAwaitArxiv, stateAwaitS2:
 		a.runExtSearch(ctx, msg, a.sessions.get(msg.From.ID))
+		return
+	case stateAwaitWebSearch:
+		a.handleWebSearch(ctx, msg)
+		return
+	case stateAwaitYouTube:
+		a.handleYouTube(ctx, msg)
 		return
 	case stateAwaitQuery:
 		a.handleSearchQuery(ctx, msg) // stores results; keeps the session alive

@@ -48,6 +48,8 @@ const (
 	stateAwaitPubmed      sessionState = "await_pubmed"
 	stateAwaitArxiv       sessionState = "await_arxiv"
 	stateAwaitS2          sessionState = "await_s2"
+	stateAwaitWebSearch   sessionState = "await_web_search"
+	stateAwaitYouTube     sessionState = "await_youtube"
 )
 
 // session holds one user's conversational context: the wizard state plus the
